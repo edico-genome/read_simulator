@@ -9,6 +9,6 @@ outdir = /mnt/archive/sim_data/pirs_simulator
 [Options]
 errorrate = 1
 useIndelErrors = 1
-varrate = 0.005
+varrate = 0.002
 reference = hg19
-target_bed = /mnt/vault/theoh/mrjd/mrjd_test.bed
+target_bed = /mnt/vault/theoh/mrjd/mrjd_test_chr1.bed

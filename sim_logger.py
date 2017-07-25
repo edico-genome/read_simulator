@@ -13,4 +13,6 @@ logging.basicConfig(
     format='%(asctime)s %(message)s',
     datefmt='%m/%d - %I:%M:%S')
 
+logging.getLogger().addHandler(logging.StreamHandler())
+
 print('logging to {}'.format(log_file))
