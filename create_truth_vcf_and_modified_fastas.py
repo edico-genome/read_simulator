@@ -34,7 +34,9 @@ def print_vcf(settings):
 
         chrs = [c.replace('>','') for c in settings['parsed_fasta']]
         for chr in chrs:
+            print("Adding chr {} to VCF".format(chr))
             if chr not in settings['var_info_for_vcf']:
+                print("- continue")
                 continue
             for var_info in reversed(settings['var_info_for_vcf'][chr]):
                 genotype = [None, None]
@@ -113,9 +115,11 @@ def define_variants(settings):
     variants will be created in the specified bed regions
     variants will be created at specified intervals
     '''
+    print('Sampling variants')
 
     # regions = ['chr1 0 50', 'chr1 100 150']
     bases_between_variants = int(1 / float(settings['variant_rate']))
+    print('bases between variants: {}'.format(bases_between_variants))
 
     settings['sampled_vars'] = {}
     with open(settings['bed']) as regions:
@@ -139,12 +143,17 @@ def define_variants(settings):
             for _p, _a1, _a2 in zip(_pos, _allele1, _allele2):
                 settings['sampled_vars'][_chr].append((_p, _a1, _a2))
 
+    for chr in settings['sampled_vars']:
+        logger.debug('chr: {}, nr of variants {}'.format(chr, len(settings['sampled_vars'][chr])))
+
 
 def add_variants_to_fasta(settings):
     logger.info('adding variants to fasta')
 
     settings['mod_fasta'] = [None, None]
+    print("Deep copy fasta 0")
     settings['mod_fasta'][0] = deepcopy(settings['parsed_fasta'])
+    print("Deep copy fasta 1")
     settings['mod_fasta'][1] = deepcopy(settings['parsed_fasta'])
 
     for chr in settings['sampled_vars']:
@@ -257,6 +266,7 @@ def write_fasta_to_file(settings, haplotype):
     with open(fasta_out, 'w') as stream_out:
         # for chr in settings['mod_fasta'][haplotype]:
         for chr in settings['parsed_fasta']: #  ordered dict - preserve fasta order
+            print("Writing chr {}".format(chr))
             # make everything of same line length
             stream_out.write("{}\n".format(chr))
             # import pdb; pdb.set_trace()
@@ -286,6 +296,7 @@ def parse_ref_fasta(settings):
                 if this_header:
                     settings['parsed_fasta'][this_header] = this_chr_fasta
                 # transition to new chr
+                print('Parsing fasta chr: {}'.format(line))
                 this_header = line
                 this_chr_fasta = []
             else:
