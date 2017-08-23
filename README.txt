@@ -1,4 +1,4 @@
-The read simulator supports is a modular framework that supports pipelines and modules to perform various simulation related tasks.
+A common framework for read simulations
 
 USAGE:
 dSim.py -r run_config.json
