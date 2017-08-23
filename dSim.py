@@ -1,0 +1,65 @@
+#!/usr/bin/env python
+
+import sys
+import argparse
+from lib import sim_logger
+from lib.settings import Settings
+from pipelines.pipelines import registered_pipelines
+
+
+logger = sim_logger.logging.getLogger(__name__)
+
+
+def pipeline_factory(pipeline_settings):
+    """
+    use pipeline settings ( pipeline name ) to determine which pipeline to instantiate
+    """
+
+    ThisPipelineClass = registered_pipelines.get(
+        pipeline_settings['pipeline_name'], None)
+
+    if not ThisPipelineClass:
+        logger.error("Please ensure pipeline: {} is registered and valid".format(
+            pipeline_settings['pipeline_name']))
+        sys.exit(1)
+
+    p = ThisPipelineClass(pipeline_settings)
+    return p
+
+
+def instantiate_pipelines():
+    """
+    instantiate pipelines and validate pipeline settings
+    """
+    pipelines = []
+    logger.info("\n\nValidating pipelines")
+    for pipeline_settings in settings.runs:
+        p = pipeline_factory(pipeline_settings)
+        pipelines.append(p)
+    return pipelines
+
+
+def run_pipelines(pipelines):
+    logger.info("\n\nRunning pipelines")
+    for pipeline in pipelines:
+        pipeline.run()
+
+
+############################################################
+# main
+def main():
+    pipelines = instantiate_pipelines()
+    run_pipelines(pipelines)
+
+
+############################################################
+if __name__ == '__main__':
+    """
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-r', '--run_settings', action='store', required=True)
+    args = parser.parse_args()
+
+    settings = Settings(args.run_settings)
+    main()
+    logger.info("Simulator Complete")

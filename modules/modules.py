@@ -1,0 +1,213 @@
+"""
+A module defines a unit of work ( creating a truth VCF/ fasta etc )
+"""
+
+import os
+import sys
+import glob
+import logging
+import vlrd_lib
+import subprocess
+from lib.db_api import DBAPI
+from abc import ABCMeta, abstractmethod, abstractproperty
+
+logger = logging.getLogger(__name__)
+
+
+class ModuleBase(object):
+    """
+    Base class for all modules (pipelines)
+    """
+    __metaclass__ = ABCMeta
+
+    def __init__(self, pipeline_settings):
+        self.pipeline_settings = pipeline_settings
+        self.dataset_name = None
+        self.module_settings = None
+        self.parse_settings()
+        self.db_api = DBAPI(self.dataset_name)
+
+    @abstractproperty
+    def name(self):
+        pass
+
+    def parse_settings(self):
+        for key in ["dataset_name", "module_settings", "outdir", "reference"]:
+            value =  self.pipeline_settings.get(key, None)
+            if not value:
+                self.fail("'{}' not specified".format(key), self.name)
+            self.__setattr__(key, value)
+
+        self.module_settings = self.pipeline_settings["module_settings"].get(self.name, {})
+        if not self.module_settings:
+            logging.warning("'{}' not specified within run_config: module_settings".format(self.name))
+
+        # create sub directory for each module
+        self.module_settings['outdir'] = os.path.join(self.outdir, self.name)
+        if not os.path.isdir(self.module_settings['outdir']):
+            try:
+                os.makedirs(self.module_settings['outdir'])
+            except Exception as e:
+                logger.error("Failed to create directory: {}, exception: {}".
+                             format(self.module_settings['outdir'], e))
+
+        self.validate_module_settings()
+
+    def print_module_settings(self):
+        logger.info(self.module_settings)
+
+    @abstractmethod
+    def validate_module_settings(self):
+        pass
+
+    @abstractmethod
+    def update_settings(self):
+        pass
+
+    @abstractmethod
+    def run(self):
+        pass
+
+    def get_dataset_ref(self):
+        rv = self.db_api.get_dataset_ref_info()
+        self.module_settings["ref_type"] = rv["ref_type"]
+        self.module_settings["ref_fasta"] = rv["fasta"]
+
+    def get_target_bed(self):
+        self.module_settings["target_bed"] = self.db_api.get_target_bed()
+
+    def post_fastas(self, fasta0, fasta1):
+        self.db_api.set_fastas(fasta0, fasta1)
+
+    @staticmethod
+    def fail(msg, module):
+        msg = "Invalid settings for module: {}, {}".format(module, msg)
+        logger.error(msg)
+        sys.exit(1)
+
+
+class VLRDmod(ModuleBase):
+    name = "vlrd"
+
+    def validate_module_settings(self):
+        if not "varrate" in self.module_settings:
+            self.fail("missing param: 'varrate'", self.name)
+        if not (float(self.module_settings['varrate']) <= 0.01):
+            self.fail('Varrate rate must be <= 0.01', self.name)
+
+    def update_settings(self):
+        self.get_dataset_ref()
+        self.get_target_bed()
+
+        for key in ["ref_type", "ref_fasta", "target_bed"]:
+            if not self.module_settings[key]:
+                print "VLRD, dataset {} missing: {}".format(self.dataset_name, key)
+                sys.exit(1)
+
+    def run(self):
+        rv = vlrd_lib.create_truth_vcf_and_fastas(self.module_settings)
+        self.db_api.set_fastas(rv['fasta0'], rv['fasta1'])
+        self.db_api.post_truth_vcf(rv['truth_vcf'])
+
+
+class Pirs(ModuleBase):
+    name = "pirs"
+
+    default_settings = {
+        "PE100": "/opt/pirs-2.0.1/Profiles/Base-Calling_Profiles/humNew.PE100.matrix.gz",
+        "indels": "/opt/pirs-2.0.1/Profiles/InDel_Profiles/phixv2.InDel.matrix",
+        "gcdep": "/opt/pirs-2.0.1/Profiles/GC-depth_Profiles/humNew.gcdep_100.dat",
+        "varrate": 0
+        }
+
+    def validate_module_settings(self):
+        for key in self.default_settings:
+            if key not in self.module_settings:
+                self.module_settings[key] = self.default_settings[key]
+        for key in ["PE100", "indels", "gcdep"]:
+            assert self.module_settings[key], "missing key {} for {}".format(key, self.name)
+
+    def update_settings(self):
+        rv = self.db_api.get_fastas()
+        self.module_settings['fasta0'] = rv['fasta0']
+        self.module_settings['fasta1'] = rv['fasta1']
+        for f in ['fasta0', 'fasta1']:
+            assert os.path.isfile(self.module_settings[f]), 'Modified %s is not a valid file' % f
+
+    def run(self):
+        logger.info('Pirs: simulating reads ...')
+        log = os.path.join(self.module_settings['outdir'], "pirs.log")
+        self.module_settings['pirs_log'] = log
+
+        """
+        options = {
+            'PE100': self.module_settings['PE100'],
+            'indels': self.module_settings['indels'],
+            'gcdep': self.module_settings['gcdep'],
+            'errorrate': self.module_settings['errorrate'],
+            'f1': self.module_settings['fasta0'],
+            'f2': self.module_settings['fasta1'],
+            'outdir_pirs': self.module_settings["outdir"]}
+        """
+
+        cmd = "pirs simulate -l 100 -x 30 -o {outdir}" + \
+            " --insert-len-mean=180 --insert-len-sd=18 --diploid " + \
+            " --base-calling-profile={PE100}" + \
+            " --indel-error-profile={indels}" + \
+            " --gc-bias-profile={gcdep}" + \
+            " --phred-offset=33 --no-gc-bias -c gzip " + \
+            " -t 48 {f1} {f2} " + \
+            " --no-indel-errors &> {pirs_log}"
+
+        cmd = cmd.format(**self.module_settings)
+
+        logger.info("pirs cmd: {}".format(cmd))
+        try:
+            subprocess.check_output(cmd, shell=True)
+        except Exception() as e:
+            logging.error('Error message %s' % e)
+            raise
+
+        logger.info('find output fastqs')
+        fq1_list = glob.glob(os.path.join(self.module_settings["outdir"], 'pirs', '*1.fq.gz'))
+        fq2_list = glob.glob(os.path.join(self.module_settings["outdir"], 'pirs', '*2.fq.gz'))
+        self.db_api.post_reads(fq1_list[0], fq2_list[0])
+
+
+class RSVSim(ModuleBase):
+    name = "rsvsim"
+
+    def validate_module_settings(self):
+        self.module_settings = {"test": 1}
+
+    def update_settings(self):
+        self.get_dataset_ref()
+
+    def run(self):
+        pass
+
+
+class VCF2Fasta(ModuleBase):
+    name = 'vcf2fasta'
+
+    def validate_module_settings(self):
+        pass
+
+    def update_settings(self):
+        pass
+
+    def run(self):
+        logger.info('VCF2Fasta: generating truth fasta ...')
+
+
+class CompositeDataset(ModuleBase):
+    name = "composite_dataset"
+
+    def validate_module_settings(self):
+        self.module_settings = {"test": 1}
+
+    def update_settings(self):
+        pass
+
+    def run(self):
+        logger.info('CompositeDataset: combining datasets with specified allele frequencies ...')

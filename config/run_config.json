@@ -1,0 +1,25 @@
+[
+  {
+    "pipeline_name": "composite_dataset",
+    "dataset_name": "dataset3",
+    "reference": "hg19",
+    "outdir": "/mnt/tmp",
+    "module_settings": {
+      "composite_dataset": {
+        "dataset1": 0.5,
+        "dataset2": 0.5
+      }
+    }
+  }
+,
+  {
+    "pipeline_name": "vlrd",
+    "dataset_name": "vlrd_chr1_normalNoise_varRate0.002",
+    "reference": "hg19",
+    "outdir": "/mnt/tmp",
+    "module_settings": {
+      "vlrd": {"varrate": 0.002},
+      "pirs": {"useIndelErrors": 0}
+    }
+  }
+]

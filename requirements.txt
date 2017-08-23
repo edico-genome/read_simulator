@@ -1,10 +1,7 @@
-certifi==2017.4.17
+certifi==2017.7.27.1
 chardet==3.0.4
+click==6.7
 idna==2.5
-pyaml==16.12.2
-pybedtools==0.7.10
-pysam==0.11.2.2
 PyYAML==3.12
-requests==2.18.1
-six==1.10.0
-urllib3==1.21.1
+requests==2.18.4
+urllib3==1.22

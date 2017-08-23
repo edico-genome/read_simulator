@@ -1,0 +1,12 @@
+def parse_config(settings):
+    config = ConfigParser.ConfigParser()
+    config.read("config")
+    settings['outdir'] = config.get('Paths', 'outdir')
+    settings['PE100'] = config.get('Profiles', 'PE100')
+    settings['indels'] = config.get('Profiles', 'indels')
+    settings['gcdep'] = config.get('Profiles', 'gcdep')
+    settings['varrate'] = config.get('Options', 'varrate')
+    settings['errorrate'] = config.get('Options', 'errorrate')
+    settings['useIndelErrors'] = config.get('Options', 'useIndelErrors')
+    settings['reference'] = config.get('Options', 'reference')
+    settings['reference'] = config.get('Options', 'reference')

@@ -1,15 +1,49 @@
-#!/usr/bin/python
-import logging
-import argparse
-import gzip
-import sys
 import os
+import sys
+import gzip
+import logging
 import random
+import subprocess
 from copy import deepcopy
 from collections import OrderedDict
 
-logging.basicConfig(level=logging.DEBUG)
+
 logger = logging.getLogger(__name__)
+
+
+############################################################
+# vcf create
+
+def bgzip_and_index_vcf(file_path):
+
+    if '.gz' in file_path:
+        raise Exception('Input VCF must be uncompressed')
+
+    cmd = "bgzip -f " + file_path
+    logger.info('bgzip cmd: {}'.format(cmd))
+    subprocess.check_output(cmd, shell=True)
+
+    vcf_gz = "{}.gz".format(file_path)
+    cmd = 'tabix -f {}'.format(vcf_gz)
+    logger.info('tabix cmd: {}'.format(cmd))
+    subprocess.check_output(cmd, shell=True)
+    return vcf_gz
+
+
+def create_truth_vcf_and_fastas(settings):
+    variant_settings = {}
+    variant_settings['bed'] = settings['target_bed']
+    variant_settings['outdir'] = settings['outdir']
+    variant_settings['variant_rate'] = settings['varrate']
+    variant_settings['ref_fasta'] = settings['ref_fasta']
+
+    truth_vcf, settings['modified_fasta_1'], settings['modified_fasta_2'] = \
+        create_truth_vcf_and_modified_fastas(variant_settings)
+
+    # for bcftools
+    # compressed_vcf = bgzip_and_index_vcf(truth_vcf)
+
+    settings['truth_vcf'] = truth_vcf
 
 
 def write_vcf_header(stream):
@@ -43,7 +77,7 @@ def print_vcf(settings):
                 pos, ref_0, ref_1, alt_0, alt_1 = var_info
                 assert ref_0[0] == ref_1[0]
 
-                # variant template 
+                # variant template
                 qual = '.'
                 info = 'N/A'
                 format = 'GT:AD:DP:GQ:PL:SB'
@@ -53,7 +87,7 @@ def print_vcf(settings):
                 if ((alt_0 == alt_1) and (ref_0 == alt_0)):
                     return
 
-                # snps and inserts are easy               
+                # snps and inserts are easy
                 alt = []
                 genotype = [0, 0]
                 if ((len(ref_0) == 1) and (len(ref_1) == 1)):
@@ -125,8 +159,8 @@ def define_variants(settings):
     with open(settings['bed']) as regions:
         for reg in regions:
             _chr, _from, _to = reg.split()[0:3]
-            _from = int(_from) 
-            _to = int(_to) 
+            _from = int(_from)
+            _to = int(_to)
             # avoid boundary effects
             if _to - 100 <= _from:
                 logger.error('Please make sure regions are > 100bp')
@@ -213,6 +247,9 @@ def add_variants_to_fasta(settings):
                 # DELs
                 if allele[0] == 'del':
 
+                    raise Exception("deletions not currently supported")
+
+                    """
                     # check if this deletion flows into the next line
                     deletion_end_index = fasta_line_rel_pos + allele[1]
                     len_this_line = len(this_fasta_line)
@@ -247,6 +284,7 @@ def add_variants_to_fasta(settings):
                         settings['mod_fasta'][haplotype][f_chr][fasta_line_index+1][fasta_line_rel_pos+1:] = \
                             'D'*del_overflow_into_next_line + \
                             next_fasta_line[del_overflow_into_next_line:]
+                    """
 
             # provide the information we'll need for the VCF
             if chr not in settings['var_info_for_vcf']:
@@ -316,7 +354,7 @@ def create_truth_vcf_and_modified_fastas(settings):
     settings['var_info_for_vcf'] = {}
     settings['mod_fasta'] = []
 
-    logger.info('\nSIMULATE VARIANTS ...')
+    logger.info('\nVLRD SIMULATING VARIANTS ...')
     parse_ref_fasta(settings)
     define_variants(settings)
     add_variants_to_fasta(settings)
@@ -324,30 +362,10 @@ def create_truth_vcf_and_modified_fastas(settings):
     write_fasta_to_file(settings, 0)
     write_fasta_to_file(settings, 1)
     logger.info('variant simulation complete')
-    return (settings['truth_vcf'], settings['mod_fasta_path_0'],
-            settings['mod_fasta_path_1'])
+
+    return {"truth_vcf": settings['truth_vcf'],
+            "fasta0": settings['mod_fasta_path_0'],
+            "fasta1": settings['mod_fasta_path_1']}
 
 
-if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-f', '--ref_fasta', action='store', required=True)
-    parser.add_argument('-b', '--bed', action='store', required=True)
-    parser.add_argument('-o', '--outdir', action='store', required=True)
-    parser.add_argument('-v', '--variant_rate', action='store', required=True)
-    args = parser.parse_args()
-
-    settings = {}
-    '''
-    settings['variant_rate'] = 0.1
-    settings['ref_fasta'] = '/mnt/vault/reference_genomes/' + \
-                            'Hsapiens/hg19_onlyChr1/seq/hg19_chr1.fa'
-    settings['bed'] = '/mnt/vault/theoh/mrjd/mrjd_test_chr1.bed'
-    settings['outdir'] = '/staging/tmp/simulated'
-    '''
-
-    settings['ref_fasta'] = args.ref_fasta
-    settings['bed'] = args.bed
-    settings['outdir'] = args.outdir
-    settings['variant_rate'] = args.variant_rate
-    create_truth_vcf_and_modified_fastas(settings)
