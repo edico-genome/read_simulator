@@ -30,22 +30,6 @@ def bgzip_and_index_vcf(file_path):
     return vcf_gz
 
 
-def create_truth_vcf_and_fastas(settings):
-    variant_settings = {}
-    variant_settings['bed'] = settings['target_bed']
-    variant_settings['outdir'] = settings['outdir']
-    variant_settings['variant_rate'] = settings['varrate']
-    variant_settings['ref_fasta'] = settings['ref_fasta']
-
-    truth_vcf, settings['modified_fasta_1'], settings['modified_fasta_2'] = \
-        create_truth_vcf_and_modified_fastas(variant_settings)
-
-    # for bcftools
-    # compressed_vcf = bgzip_and_index_vcf(truth_vcf)
-
-    settings['truth_vcf'] = truth_vcf
-
-
 def write_vcf_header(stream):
     stream.write('##fileformat=VCFv4.2\n')
     stream.write('#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE\n')
@@ -152,11 +136,11 @@ def define_variants(settings):
     print('Sampling variants')
 
     # regions = ['chr1 0 50', 'chr1 100 150']
-    bases_between_variants = int(1 / float(settings['variant_rate']))
+    bases_between_variants = int(1 / float(settings['varrate']))
     print('bases between variants: {}'.format(bases_between_variants))
 
     settings['sampled_vars'] = {}
-    with open(settings['bed']) as regions:
+    with open(settings['target_bed']) as regions:
         for reg in regions:
             _chr, _from, _to = reg.split()[0:3]
             _from = int(_from)
@@ -178,7 +162,7 @@ def define_variants(settings):
                 settings['sampled_vars'][_chr].append((_p, _a1, _a2))
 
     for chr in settings['sampled_vars']:
-        logger.debug('chr: {}, nr of variants {}'.format(chr, len(settings['sampled_vars'][chr])))
+        logger.info('chr: {}, nr of variants {}'.format(chr, len(settings['sampled_vars'][chr])))
 
 
 def add_variants_to_fasta(settings):
@@ -345,11 +329,11 @@ def parse_ref_fasta(settings):
         settings['parsed_fasta'][this_header] = this_chr_fasta
 
 
-def create_truth_vcf_and_modified_fastas(settings):
-    '''
+def create_truth_vcf_and_fastas(settings):
+    """
     takes as input a FASTA file and a specification regarding which
     regions/ type and frequency of variants you want to simulate
-    '''
+    """
 
     settings['var_info_for_vcf'] = {}
     settings['mod_fasta'] = []
@@ -363,9 +347,11 @@ def create_truth_vcf_and_modified_fastas(settings):
     write_fasta_to_file(settings, 1)
     logger.info('variant simulation complete')
 
-    return {"truth_vcf": settings['truth_vcf'],
-            "fasta0": settings['mod_fasta_path_0'],
-            "fasta1": settings['mod_fasta_path_1']}
+    res = {"truth_vcf": settings['truth_vcf'],
+           "fasta0": settings['mod_fasta_path_0'],
+           "fasta1": settings['mod_fasta_path_1']}
+
+    return res
 
 
 

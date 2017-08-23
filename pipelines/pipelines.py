@@ -43,7 +43,6 @@ class PipelinesBase(object):
         logger.info("-" * 60)
         logger.info(msg)
         for inst in self.module_instances:
-            inst.update_settings()
             inst.run()
 
 

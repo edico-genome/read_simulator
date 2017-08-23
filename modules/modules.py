@@ -14,11 +14,34 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 logger = logging.getLogger(__name__)
 
 
+###########################################################
 class ModuleBase(object):
     """
     Base class for all modules (pipelines)
     """
     __metaclass__ = ABCMeta
+
+    @abstractproperty
+    def name(self):
+        pass
+
+    @abstractproperty
+    def default_settings(self):
+        """
+        a dictionary of key: value pairs that will be
+        used as default module settings
+        :rtype: dict
+        """
+        pass
+
+    @abstractproperty
+    def expected_settings(self):
+        """
+        list the keys that should be in module settings
+        used to validate module settings prior to run
+        :rtype: list
+        """
+        pass
 
     def __init__(self, pipeline_settings):
         self.pipeline_settings = pipeline_settings
@@ -27,13 +50,16 @@ class ModuleBase(object):
         self.parse_settings()
         self.db_api = DBAPI(self.dataset_name)
 
-    @abstractproperty
-    def name(self):
-        pass
+    def validate_module_settings(self):
+        for key in self.default_settings:
+            if key not in self.module_settings:
+                self.module_settings[key] = self.default_settings[key]
+        for key in self.expected_settings:
+            assert self.module_settings[key], "missing key {} for {}".format(key, self.name)
 
     def parse_settings(self):
         for key in ["dataset_name", "module_settings", "outdir", "reference"]:
-            value =  self.pipeline_settings.get(key, None)
+            value = self.pipeline_settings.get(key, None)
             if not value:
                 self.fail("'{}' not specified".format(key), self.name)
             self.__setattr__(key, value)
@@ -57,14 +83,6 @@ class ModuleBase(object):
         logger.info(self.module_settings)
 
     @abstractmethod
-    def validate_module_settings(self):
-        pass
-
-    @abstractmethod
-    def update_settings(self):
-        pass
-
-    @abstractmethod
     def run(self):
         pass
 
@@ -80,22 +98,20 @@ class ModuleBase(object):
         self.db_api.set_fastas(fasta0, fasta1)
 
     @staticmethod
-    def fail(msg, module):
-        msg = "Invalid settings for module: {}, {}".format(module, msg)
+    def fail(msg, mod):
+        msg = "Invalid settings for module: {}, {}".format(mod, msg)
         logger.error(msg)
         sys.exit(1)
 
 
+###########################################################
 class VLRDmod(ModuleBase):
     name = "vlrd"
+    default_settings = {}
+    expected_settings = ["varrate"]
 
-    def validate_module_settings(self):
-        if not "varrate" in self.module_settings:
-            self.fail("missing param: 'varrate'", self.name)
-        if not (float(self.module_settings['varrate']) <= 0.01):
-            self.fail('Varrate rate must be <= 0.01', self.name)
-
-    def update_settings(self):
+    def run(self):
+        # get last minute settings
         self.get_dataset_ref()
         self.get_target_bed()
 
@@ -104,51 +120,36 @@ class VLRDmod(ModuleBase):
                 print "VLRD, dataset {} missing: {}".format(self.dataset_name, key)
                 sys.exit(1)
 
-    def run(self):
-        rv = vlrd_lib.create_truth_vcf_and_fastas(self.module_settings)
-        self.db_api.set_fastas(rv['fasta0'], rv['fasta1'])
-        self.db_api.post_truth_vcf(rv['truth_vcf'])
+        # run
+        res = vlrd_lib.create_truth_vcf_and_fastas(self.module_settings)
+        logger.info(res)
+        self.db_api.set_fastas(res['fasta0'], res['fasta1'])
+        self.db_api.post_truth_vcf(res['truth_vcf'])
 
 
+###########################################################
 class Pirs(ModuleBase):
     name = "pirs"
-
     default_settings = {
         "PE100": "/opt/pirs-2.0.1/Profiles/Base-Calling_Profiles/humNew.PE100.matrix.gz",
         "indels": "/opt/pirs-2.0.1/Profiles/InDel_Profiles/phixv2.InDel.matrix",
         "gcdep": "/opt/pirs-2.0.1/Profiles/GC-depth_Profiles/humNew.gcdep_100.dat",
-        "varrate": 0
-        }
+    }
+    expected_settings = ["PE100", "indels", "gcdep"]
 
-    def validate_module_settings(self):
-        for key in self.default_settings:
-            if key not in self.module_settings:
-                self.module_settings[key] = self.default_settings[key]
-        for key in ["PE100", "indels", "gcdep"]:
-            assert self.module_settings[key], "missing key {} for {}".format(key, self.name)
-
-    def update_settings(self):
+    def run(self):
+        # last minute settings
         rv = self.db_api.get_fastas()
         self.module_settings['fasta0'] = rv['fasta0']
         self.module_settings['fasta1'] = rv['fasta1']
         for f in ['fasta0', 'fasta1']:
-            assert os.path.isfile(self.module_settings[f]), 'Modified %s is not a valid file' % f
+            assert os.path.isfile(self.module_settings[f]), \
+                'Modified %s is not a valid file' % f
 
-    def run(self):
+        # run
         logger.info('Pirs: simulating reads ...')
         log = os.path.join(self.module_settings['outdir'], "pirs.log")
         self.module_settings['pirs_log'] = log
-
-        """
-        options = {
-            'PE100': self.module_settings['PE100'],
-            'indels': self.module_settings['indels'],
-            'gcdep': self.module_settings['gcdep'],
-            'errorrate': self.module_settings['errorrate'],
-            'f1': self.module_settings['fasta0'],
-            'f2': self.module_settings['fasta1'],
-            'outdir_pirs': self.module_settings["outdir"]}
-        """
 
         cmd = "pirs simulate -l 100 -x 30 -o {outdir}" + \
             " --insert-len-mean=180 --insert-len-sd=18 --diploid " + \
@@ -156,7 +157,7 @@ class Pirs(ModuleBase):
             " --indel-error-profile={indels}" + \
             " --gc-bias-profile={gcdep}" + \
             " --phred-offset=33 --no-gc-bias -c gzip " + \
-            " -t 48 {f1} {f2} " + \
+            " -t 48 {fasta0} {fasta1} " + \
             " --no-indel-errors &> {pirs_log}"
 
         cmd = cmd.format(**self.module_settings)
@@ -174,40 +175,31 @@ class Pirs(ModuleBase):
         self.db_api.post_reads(fq1_list[0], fq2_list[0])
 
 
+###########################################################
 class RSVSim(ModuleBase):
     name = "rsvsim"
-
-    def validate_module_settings(self):
-        self.module_settings = {"test": 1}
-
-    def update_settings(self):
-        self.get_dataset_ref()
+    default_settings = {}
+    expected_settings = []
 
     def run(self):
         pass
 
 
+###########################################################
 class VCF2Fasta(ModuleBase):
     name = 'vcf2fasta'
-
-    def validate_module_settings(self):
-        pass
-
-    def update_settings(self):
-        pass
+    default_settings = {}
+    expected_settings = []
 
     def run(self):
         logger.info('VCF2Fasta: generating truth fasta ...')
 
 
+###########################################################
 class CompositeDataset(ModuleBase):
     name = "composite_dataset"
-
-    def validate_module_settings(self):
-        self.module_settings = {"test": 1}
-
-    def update_settings(self):
-        pass
+    default_settings = {}
+    expected_settings = []
 
     def run(self):
         logger.info('CompositeDataset: combining datasets with specified allele frequencies ...')

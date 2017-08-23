@@ -4,6 +4,7 @@ Methods to GET/ POST from DB/ LOOKUP TABLE
 import requests
 import logging
 import json
+import os
 
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,9 @@ class DBAPI(object):
     ###################################
     # UPLOAD METHODS
     def set_fastas(self, fasta0, fasta1):
+        for f in [fasta0, fasta1]:
+            if not os.path.isfile(fasta0):
+                raise Exception("Not a valid fasta: {}".format(f))
         self.outputs_dict[self.dataset_name] = {}
         self.outputs_dict[self.dataset_name]['fasta0'] = fasta0
         self.outputs_dict[self.dataset_name]['fasta1'] = fasta1

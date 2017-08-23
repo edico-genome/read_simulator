@@ -4,3 +4,5 @@
 venv_x86/*
 venv/*
 *.log
+\.idea
+\.idea/*
