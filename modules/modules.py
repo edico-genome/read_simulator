@@ -55,7 +55,7 @@ class AltContigVCF(ModuleBase):
                             try:
                                 c_len = int(len_col.replace("LN:", ""))
                                 self.module_settings[c_idx + "-len"] = c_len
-                                logger.info(self.module_settings[c_idx], self.module_settings[c_idx+"-len"])
+                                logger.info("%s: %s" % (self.module_settings[c_idx], self.module_settings[c_idx+"-len"]))
                             except Exception as e:
                                 logger.error("Contig len not found/ integer in line: {}".format(line))
 
@@ -101,13 +101,13 @@ class AltContigVCF(ModuleBase):
     def fasta_sam_to_vcf(self):
         script_path = os.path.join(this_dir_path, "alt_contig", "fasta_sam_to_vcf.pl")
         self.module_settings["truth_vcf"] = os.path.join(self.module_settings["outdir"], "alt_contig_truth.vcf")
-        cmd = script_path + " {fasta_file} {alt-sam} {alt-contig-1}:1-{alt-contig-1-len} {alt-contig-2}:1-{alt-contig-2-len} {truth_vcf}"
+        cmd = script_path + " {fasta_file} {alt-sam} {alt-contig-1}:1-{alt-contig-1-len} {alt-contig-2}:1-{alt-contig-2-len} > {truth_vcf}"
         cmd = cmd.format(**self.module_settings)
         logger.info("create truth vcf cmd: {}".format(cmd))
         try:
             subprocess.check_call(cmd, shell=True)
         except Exception as e:
-            logger.error('Failed to create truth VCF, but for now ignore')
+            raise Exception('Failed to create truth VCF: {}'.format(e))
         self.db_api.post_truth_vcf(self.module_settings["truth_vcf"])
 
     def run(self):
@@ -131,13 +131,14 @@ class Pirs(ModuleBase):
     def run(self):
         # last minute settings
         self.before_run()
-        rv = self.db_api.get_fastas()
-        for fa in ['fasta0', 'fasta1']:
-            if os.path.isfile(self.module_settings.get(fa, "")):
+        try:
+            rv = self.db_api.get_fastas()
+            for fa in ['fasta0', 'fasta1']:
                 self.module_settings[fa] = rv[fa]
-            else:
-                logger.error('Pirs is missing a required modified Fasta')
-                sys.exit(1)
+        except Exception as e:
+            logger.error('Pirs is missing a required modified Fasta')
+            logger.error("Exception: {}".format(e))
+            sys.exit(1)
 
         # run
         logger.info('Pirs: simulating reads ...')

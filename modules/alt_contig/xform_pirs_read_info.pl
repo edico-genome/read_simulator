@@ -6,11 +6,11 @@ use File::Basename qw(dirname);
 my $exec_dir;
 BEGIN { $exec_dir = dirname($0); }
 use lib "$exec_dir";
-use AltAware::Coords qw(alt_to_pri_map);
+use AltAware::Coords qw(cigar_pos_map);
 
 sub usage {
    print STDERR "Usage:\n";
-   print STDERR "\t xform_read_info.pl pirs_simulation.read.info alt.sam [chr6_s:chr6:29775250] > read.info.xform\n";
+   print STDERR "\t xform_read_info.pl pirs_simulation.read.info alt.sam [chr6_s::chr6::29775250] > read.info.xform\n";
    print STDERR "\t    (See inline documentation for more details.)\n";
    exit(1);
 }
@@ -44,7 +44,7 @@ sub usage {
 #  The read length is hard coded below
 #
 
-my $readLen = 100;
+my $readLen;
 
 my ($readinfoFile, $altSam, $offsetOpt) = @ARGV;
 
@@ -58,21 +58,38 @@ my $mod_sqname;
 my $pri_sqname;
 my $sq_offset;
 if (defined $offsetOpt) {
-   ($mod_sqname, $pri_sqname, $sq_offset) = split ":", $offsetOpt;
+   ($mod_sqname, $pri_sqname, $sq_offset) = split "::", $offsetOpt;
 }
+
+# This section parses the header of the read.info file
+my $infoFH;
+open $infoFH, "$readinfoFile" or die $!;
+while(my $line = <$infoFH>) {
+  chomp $line;
+  if ($line =~ /^#/) {
+     last if (substr($line,0,8) eq "# readId");
+     $line =~ s/ //g;
+     my @t = split ":", $line;
+     if (scalar(@t) == 2 and $t[0] eq "#Readlength") {
+         $readLen = $t[1];
+     }
+  } else {
+     print "$readLen    $line\n";
+     die "Unexpectedly read past the end of the header section in $readinfoFile.";
+  }
+}
+die "Read length setting not found in $readinfoFile." if (not defined $readLen);
 
 # This section parses the Pirs "*.read.info" truth alignments and converts them to SAM
 printf STDERR "Transforming truth alignments\n";
 my $numReads = 0;
-my %priContigName = ();
-my %altPosMap = (); 
-my $infoFH;
-open $infoFH, "$readinfoFile" or die $!;
+my %altToPriXform = ();
+my %cigPosMap = (); 
 while(my $line = <$infoFH>) {
-  next if $line =~ /^\W/;
-  chomp $line;  # 4th field is contig mapping position (0-based)
+  chomp $line;
 
   my ($qname, $ref, $seq, $pos, $str, $insLen, $junk, $sub, $ins, $del) = split(/\t/,$line);
+  # $pos is 0-based mapping position
 
   $seq =~ s/ .*//;  # Discard the first space char in the pirs contig name and all chars after.
 
@@ -112,7 +129,7 @@ while(my $line = <$infoFH>) {
      # mapping POS on primary contig.
      #print STDOUT "Before\t$seq:$pos\n";
 
-     if (not defined $altPosMap{$seq} or not defined $priContigName{$seq}) {
+     if (not defined $altToPriXform{$seq}) {
 
         # Only have to do the following _ONCE_ for each ALT contig encountered.
 
@@ -124,36 +141,55 @@ while(my $line = <$infoFH>) {
            next if /^@/;
            my @t = split;
            next if ($t[0] ne $seq or $t[1] > 200);
-           my $alt_pos = $t[3];
            my $alt_cigar = $t[5];
 
-           $priContigName{$seq} = $t[2];
-           $altPosMap{$seq} = alt_to_pri_map($alt_pos, $alt_cigar);
+           $altToPriXform{$seq}{'FLAG'} = $t[1];
+           $altToPriXform{$seq}{'RNAME'} = $t[2];
+           $altToPriXform{$seq}{'POS'} = $t[3];
+           $altToPriXform{$seq}{'CMAP'} = cigar_pos_map($alt_cigar);  # Returns CMAP array ref.
+                                                                      # CMAP maps ALT pos to a
+                                                                      # CIGAR-adjusted pos.
+           $altToPriXform{$seq}{'LENGTH'} = scalar(@{$altToPriXform{$seq}{'CMAP'}});
 
            last;
         }
         close $samFH;
      }
 
-     # At this point it's an error if our lookup tables aren't defined
-     if (not defined $altPosMap{$seq} or not defined $priContigName{$seq}) {
+     # At this point it's an error if our table is not defined
+     if (not defined $altToPriXform{$seq}) {
         die "Unable to create alt_to_pri_map for $seq.";
      }
-     my $pri_contig_pos = $altPosMap{$seq}->[$pos]; # use $pos since it's 0-based
-     if ($priContigName{$seq} eq "" or $pri_contig_pos <= 0) {
-        die "Invalid primary contig mapping tag for $seq:$pos => $pri_contig_tag";
+
+     my $pri_contig_flag = $flag;
+     my $pri_contig_name = $altToPriXform{$seq}{'RNAME'};
+
+     # CMAP->[$pos] maps ALT $pos to a alt->pri CIGAR ajusted offset
+     my $delta_p = $altToPriXform{$seq}{'CMAP'}->[$pos];
+
+     if ($altToPriXform{$seq}{'FLAG'} & 0x10) {
+         # This ALT contig is RC-oriented w.r.t. its primary assembly contig,
+         # so our ALT $pos has an opposite effect on the primary contig mapping pos.
+         $delta_p = $altToPriXform{$seq}{'LENGTH'} - $delta_p - $readLen;
+
+         # The map orientation bits in primary contig FLAG must be switched such
+         # that 0x10 becomes 0x20 and vice versa.
+         $pri_contig_flag += ($flag & 0x10) ? 0x10 : -0x10;
+     }
+     my $pri_contig_pos = $altToPriXform{$seq}{'POS'} + $delta_p;
+     if ($pri_contig_pos <= 0) {
+        die "Invalid primary contig mapping tag for $seq:$pos -> $pri_contig_name";
      }
 
-     #print STDOUT "$seq:$pos\ts:$pri_contig_name:$pri_contig_pos\n";
-     $pri_contig_tag = "ZM:Z:$priContigName{$seq};$pri_contig_pos";
+     #print STDOUT "ZM:Z:$pri_contig_name;$pri_contig_pos;$pri_contig_flag\n";
+     $pri_contig_tag = "ZM:Z:$pri_contig_name;$pri_contig_pos;$pri_contig_flag";
 
   } elsif (defined $mod_sqname and ($seq eq $mod_sqname) ) {
      # This read was simulated from a short section of a primary contig, so
      # use the offset from our optional cmd line arg to adjust the mapping POS.
-     $pos += ($sq_offset - 1);
+     $alnPos += ($sq_offset - 1);
      $seq = $pri_sqname;
   }
-
 
   # Output
   # Strip off trailing /1 or /2 in qname, if present

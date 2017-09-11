@@ -60,10 +60,10 @@ class DBAPI(object):
         fasta0 = self.outputs_dict[self.dataset_name].get('fasta0')
         fasta1 = self.outputs_dict[self.dataset_name].get('fasta1')
         for idx, f in enumerate([fasta0, fasta1]):
-            if f:
-                logger.info("Detected fasta: {}".format(f))
+            if f and os.path.isfile(f):
+                logger.info("Detected fasta file: {}".format(f))
             else:
-                logger.info("Did not detect fasta {}: {}".format(idx, f))
+                raise Exception("Did not find Fasta {}: {}".format(idx, f))
         return {'fasta0': fasta0, 'fasta1': fasta1}
 
     ###################################

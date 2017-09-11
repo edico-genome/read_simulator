@@ -111,7 +111,12 @@ sub cigar_array {
     return @result;
 }
 
-
+sub reverse_complement {
+  my $sequence = shift;
+  $sequence =~ tr/CATG/GTAC/;
+  $sequence = reverse($sequence);
+  return $sequence;
+}
 
 # Usage example:  @seq_vars = find_variants($alt_range, $pri_range, $alt_sam, $fasta);
 sub find_variants {
@@ -128,6 +133,9 @@ sub find_variants {
    my $alt_seq = `samtools faidx $fasta $alt_range | tail -n +2 | tr -d '\n'`;
    my $pri_seq = `samtools faidx $fasta $pri_range | tail -n +2 | tr -d '\n'`;
 
+   $alt_seq = uc($alt_seq);
+   $pri_seq = uc($pri_seq);
+
    #my $foo = substr $pri_seq, 0, 10;
    #print "$foo\n";
    #exit(1);
@@ -136,6 +144,7 @@ sub find_variants {
    my ($pri_contig_name, $pri_start, $pri_end) = split /[:-]/, $pri_range;
 
    my @field = split "\t", $alt_sam;
+   my $sam_flag = $field[1];
    my $sam_pri_contig = $field[2];
    my $priSamPOS = $field[3];
    my $cigar = $field[5];
@@ -143,6 +152,16 @@ sub find_variants {
 
    die "Primary sequence name mismatch in find_variants()." if ($pri_contig_name ne $sam_pri_contig);
    die "pri_start < priSamPOS detected in find_variants()." if ($pri_start < $priSamPOS);
+
+   # If alt_seq is RC-oriented w.r.t. prim contig, then reverse complement the sequence so our
+   # CIGAR is in-sync w/ alt_seq.
+   if ($sam_flag & 0x10) {
+      print STDERR "Got here.\n";
+      $alt_seq = reverse_complement($alt_seq);
+   }
+
+   my $a1 = substr($alt_seq,0,15);  my $p1 = substr($pri_seq,0,15);
+   print STDERR "alt_seq=$a1\tpri_seq=$p1\n";
 
    # Init our base position indeces
    my $altCurrPos = 0;               # position of end of current cigar op (1-based index into whole ALT contig)

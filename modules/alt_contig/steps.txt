@@ -1,0 +1,7 @@
+
+
+
+# create VCF
+fasta_sam_to_vcf.pl FASTA ALT_SAM SEQ_RANGE1 SEQ_RANGE2 > OUT.VCF
+
+./fasta_sam_to_vcf.pl /mnt/vault/reference_genomes/Hsapiens/hg38/seq/hg38.fa /opt/bwakit-0.7.12-0/resource-GRCh38/hs38DH.fa.alt chr6_GL000250v2_alt:1-1200000 chr6_GL000251v2_alt > GL000250v2--GL000251v2_1.2M.vcf
