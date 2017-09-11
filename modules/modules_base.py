@@ -69,10 +69,12 @@ class ModuleBase(object):
         self.module_settings['outdir'] = os.path.join(self.outdir, self.name)
         if not os.path.isdir(self.module_settings['outdir']):
             try:
+                logger.info("create module outdir: {}".format(self.module_settings['outdir']))
                 os.makedirs(self.module_settings['outdir'])
             except Exception as e:
                 logger.error("Failed to create directory: {}, exception: {}".
                              format(self.module_settings['outdir'], e))
+                sys.exit(1)
 
         self.validate_module_settings()
 

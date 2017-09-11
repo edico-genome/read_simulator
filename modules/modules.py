@@ -44,8 +44,6 @@ class AltContigVCF(ModuleBase):
     def get_alt_contig_lengths(self):
         """ lookup alt contig length in dict - fix this mock """
         logger.info("Get alt contig lengths")
-        logger.info(self.module_settings["alt-contig-1"])
-        logger.info(self.module_settings["alt-contig-2"])
 
         with open(self.module_settings["dict_file"], 'r') as stream:
             for line in stream:
@@ -57,6 +55,7 @@ class AltContigVCF(ModuleBase):
                             try:
                                 c_len = int(len_col.replace("LN:", ""))
                                 self.module_settings[c_idx + "-len"] = c_len
+                                logger.info(self.module_settings[c_idx], self.module_settings[c_idx+"-len"])
                             except Exception as e:
                                 logger.error("Contig len not found/ integer in line: {}".format(line))
 
@@ -105,7 +104,10 @@ class AltContigVCF(ModuleBase):
         cmd = script_path + " {fasta_file} {alt-sam} {alt-contig-1}:1-{alt-contig-1-len} {alt-contig-2}:1-{alt-contig-2-len} {truth_vcf}"
         cmd = cmd.format(**self.module_settings)
         logger.info("create truth vcf cmd: {}".format(cmd))
-        subprocess.check_call(cmd, shell=True)
+        try:
+            subprocess.check_call(cmd, shell=True)
+        except Exception as e:
+            logger.error('Failed to create truth VCF, but for now ignore')
         self.db_api.post_truth_vcf(self.module_settings["truth_vcf"])
 
     def run(self):
