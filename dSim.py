@@ -4,7 +4,7 @@ import sys
 import argparse
 from lib import sim_logger
 from lib.settings import Settings
-from pipelines.pipelines import registered_pipelines
+from pipelines import pipelines
 
 
 logger = sim_logger.logging.getLogger(__name__)
@@ -14,9 +14,10 @@ def pipeline_factory(pipeline_settings):
     """
     use pipeline settings ( pipeline name ) to determine which pipeline to instantiate
     """
+    ThisPipelineClass = None
+    ThisPipelineClass = getattr(pipelines, pipeline_settings["pipeline_name"])
+    assert issubclass(ThisPipelineClass, pipelines.PipelinesBase), "This is not a valid pipeline: {}".format(c.name)
 
-    ThisPipelineClass = registered_pipelines.get(
-        pipeline_settings['pipeline_name'], None)
 
     if not ThisPipelineClass:
         logger.error("Please ensure pipeline: {} is registered and valid".format(
@@ -34,8 +35,12 @@ def instantiate_pipelines():
     pipelines = []
     logger.info("\n\nValidating pipelines")
     for pipeline_settings in settings.runs:
-        p = pipeline_factory(pipeline_settings)
-        pipelines.append(p)
+        # default on
+        if pipeline_settings.get("on/off", "on") in [0, None, "off"]:
+            continue
+        else:
+            p = pipeline_factory(pipeline_settings)
+            pipelines.append(p)
     return pipelines
 
 

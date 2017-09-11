@@ -1,7 +1,36 @@
 [
   {
-    "pipeline_name": "composite_dataset",
-    "dataset_name": "dataset3",
+    "on/off": 1,
+    "pipeline_name": "AltContig",
+    "dataset_name": "alt_contig_chr6",
+    "reference": "hg38",
+    "outdir": "/mnt/tmp",
+    "module_settings": {
+      "AltContigVCF": {
+            "contig": "chr6",
+            "alt-contig-1": "chr6_GL000250v2_alt",
+            "alt-contig-2": "chr6_GL000250v2_alt",
+            "alt-sam": "/opt/bwakit-0.7.12-0/resource-GRCh38/hs38DH.fa.alt"},
+      "Pirs": {"useIndelErrors": 0}
+    }
+  }
+,
+  {
+    "on/off": 0,
+    "pipeline_name": "VLRD",
+    "dataset_name": "vlrd_chr1_normalNoise_varRate0.002",
+    "reference": "hg19",
+    "outdir": "/mnt/tmp",
+    "module_settings": {
+      "VLRDVCF": {"varrate": 0.002},
+      "Pirs": {"useIndelErrors": 0}
+    }
+  }
+,
+  {
+    "on/off": 0,
+    "pipeline_name": "CompositeDataset",
+    "dataset_name": "test_dataset",
     "reference": "hg19",
     "outdir": "/mnt/tmp",
     "module_settings": {
@@ -9,17 +38,6 @@
         "dataset1": 0.5,
         "dataset2": 0.5
       }
-    }
-  }
-,
-  {
-    "pipeline_name": "vlrd",
-    "dataset_name": "vlrd_chr1_normalNoise_varRate0.002",
-    "reference": "hg19",
-    "outdir": "/mnt/tmp",
-    "module_settings": {
-      "vlrd": {"varrate": 0.002},
-      "pirs": {"useIndelErrors": 0}
     }
   }
 ]

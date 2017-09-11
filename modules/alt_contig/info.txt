@@ -1,0 +1,158 @@
+CONFIG SETTINGS
+
+{
+    "pipeline_name": "AltContig",
+    "dataset_name": "alt-contig-hg38-1",
+    "reference": "hg38",
+    "outdir": "/mnt/tmp",
+    "module_settings": {
+        "alt-contig-truth-vcf": {
+            "contig": "chr6",
+      	    "alt-contig-1": "chr6_GL000250v2_alt",
+            "alt-contig-2": None,
+	},
+    "pirs": {"useIndelErrors": 0}
+    }
+}
+
+
+
+#########
+Step 1: Find Fasta <-> alt contig matching ranges
+
+
+## Example of getting primary assembly contig coords for a given ALT contig range  ##
+$ cd /home/cooper/p4/sw/trunk/test/bin/ma_qual_pipeline/alt_aware
+$ ### Length of  chr6_GL000250v2_alt contig is 4672374
+$ ./convert_alt_to_pri_coords.pl   /opt/bwakit-0.7.12-0/resource-GRCh38/hs38DH.fa.alt   chr6_GL000250v2_alt   1   4672374
+chr6    28734408        33367716        chr6_GL000250v2_alt     1       4672374
+
+## Now find range on another ALT contig corresponding with above range on chr6
+## Note that the cmd line args for this 'reverse' tool are:  $ALT_FILE  $ALT_NAME  $PRIMARY_CONTIG_START_POS    $PRIMARY_CONTIG_END_POS
+$ ./convert_pri_to_alt_coords.pl   /opt/bwakit-0.7.12-0/resource-GRCh38/hs38DH.fa.alt   chr6_GL000251v2_alt   28734408   33367716
+chr6    28734408        33367716        chr6_GL000251v2_alt     225082  4779191
+
+Side note:   hg38.fa ALT contigs  either end with '_alt' or start with 'HLA'.
+
+
+
+#########
+Step 2: Convert Alt-contig into truth VCF ( for specific range )
+For now focus on hg38
+
+# fasta_sam_to_vcf.pl FASTA ALT_SAM SEQ_RANGE1 SEQ_RANGE2 > OUT.VCF
+
+./fasta_sam_to_vcf.pl /mnt/vault/reference_genomes/Hsapiens/hg38/seq/hg38.fa /opt/bwakit-0.7.12-0/resource-GRCh38/hs38DH.fa.alt chr6_GL000250v2_alt:1-1200000 chr6_GL000251v2_alt GL000250v2--GL000251v2_1.2M.vcf
+
+
+#########
+Step 3: Simulate reads from the alt contig
+
+#########
+Step 4: Run test_runner
+
+
+
+
+###############################################################################
+# original
+//sw/trunk/test/bin/ma_qual_pipeline/alt_aware/*.pl
+# copied
+//git/read_simulator/modules/alt_contig
+
+###############################################################################
+
+
+Theo, 
+Please scan the following usage info before we talk later today.  
+
+fyi- the ALT contig SAM for hg38 is here: /opt/bwakit-0.7.12-0/resource-GRCh38/hs38DH.fa.alt.
+
+# Usage: fasta_sam_to_vcf.pl FASTA ALT_SAM SEQ_RANGE1 SEQ_RANGE2 > OUT.VCF
+#
+# This tool requires a single FASTA, an ALT contig SAM, and 2 overlapping sequence
+# ranges (i.e. haplotypes). SEQ_RANGE1 must be on an ALT contig. On the command line,
+# the two ranges are specified like this:
+#        chr1_GL383518v1_alt:17254-17263 chr1:153700531-153700540
+# The ALT SAM file provides alignments of ALT contigs to the primary assembly contigs.
+#
+# This tool uses `samtools faidx $input_fasta $chr_range` to fetch sequences. The tool
+# requires that the two input ranges align to exactly the same region on the primary
+# assembly contig. The first range arg must be fully specified; i.e. CONTIG:START-END.
+# If the second input range arg consists of just a contig name (lacks base pos coords),
+# then the range on this contig corresponding to the first range arg will be determined
+# automatically. For instance, if user specifies:
+#     chr1_GL383518v1_alt:17254-17263 chr1
+# for the two range args then the tool will find the range on chr1 corresponding to
+# chr1_GL383518v1_alt:17254-17263.
+#
+# The FASTA must include each primary assembly contig and ALT contig specified on the
+# command line. The FASTA must also include the primary assembly contigs given in the
+# RNAME fields in the ALT SAM file. The ALT SAM file must contain primary assembly
+# alignment(s) for each ALT contig specified on the command line.
+#
+# This tool may fail, or produce ill-defined results, if an input ALT contig range does not
+# begin in a 'M','=', or 'X' operation in the ALT's CIGAR.  In future, the tool may find
+# the nearest range that satisfies this requirement.
+#
+# The tool's output is VCF format w/ one record per variant starting POS. Variant alleles
+# are in the ALT contig(s) w.r.t. the corresponding primary assembly region. The variants
+# are phased and zygosity is provided by the VCF genotype (GT) value.
+
+- - - - - - - - - - - - - - - - -
+Example of complete command line with 2 long ALT contigs that overlap roughly the same range on chr6:
+
+$ ./fasta_sam_to_vcf.pl \
+> /mnt/vault/reference_genomes/Hsapiens/hg38/seq/hg38.fa \
+> /opt/bwakit-0.7.12-0/resource-GRCh38/hs38DH.fa.alt \
+> chr6_GL000250v2_alt:1-1200000 \
+> chr6_GL000251v2_alt > GL000250v2--GL000251v2_1.2M.vcf
+
+The output VCF may contain some variant records that are incompatible with our current variant comparison tools. See below for some examples. May have to ask Sanket for help on this. 
+
+chr6    28792525        .       A       <DEL>,<DEL2>  .       .       SVLEN=-2;SVLEN2=-26     GT      1|2
+chr6    28798635        .       G       GTA,<DEL>        .       .       SVLEN=-4                            GT      1|2
+chr6    28798802        .       T       <DEL>                 .       .       SVLEN=-120                        GT      0|1
+
+The short <DEL> variants occur at positions where other variants co-occur.
+
+
+###############################################################################
+
+Here are the pirs sim reads from a simulation involving two overlapping ~5Mb ALT contigs on chr6 (HLA region):
+
+/mnt/archive/jcr/projects/mapalign/alt_aware/sim/hla/chr6_GL000250v2_alt--chr6_GL000251v2_alt/pirs_reads_100_400_*.fq.gz
+
+The 2 ALT contigs in FASTA format are chr6_GL000250v2_alt.fa and chr6_GL000251v2_alt.fa in the same dir.
+
+The truth VCF is chr6_GL000250v2_alt--chr6_GL000251v2_alt.vcf in the same dir.  I'm working on the truth SAM.
+
+The script for making all the above is run_sim.250--251.sh in the same dir.
+
+
+#############################################################################################
+
+
+## Example of getting primary assembly contig coords for a given ALT contig range  ##
+$ cd /home/cooper/p4/sw/trunk/test/bin/ma_qual_pipeline/alt_aware
+$ ### Length of  chr6_GL000250v2_alt contig is 4672374
+$ ./convert_alt_to_pri_coords.pl   /opt/bwakit-0.7.12-0/resource-GRCh38/hs38DH.fa.alt   chr6_GL000250v2_alt   1   4672374
+chr6    28734408        33367716        chr6_GL000250v2_alt     1       4672374
+
+## Now find range on another ALT contig corresponding with above range on chr6
+## Note that the cmd line args for this 'reverse' tool are:  $ALT_FILE  $ALT_NAME  $PRIMARY_CONTIG_START_POS    $PRIMARY_CONTIG_END_POS
+$ ./convert_pri_to_alt_coords.pl   /opt/bwakit-0.7.12-0/resource-GRCh38/hs38DH.fa.alt   chr6_GL000251v2_alt   28734408   33367716
+chr6    28734408        33367716        chr6_GL000251v2_alt     225082  4779191
+
+Side note:   hg38.fa ALT contigs  either end with '_alt' or start with 'HLA'.
+
+####################################################################################
+
+
+I fixed some bugs in //sw/trunk/test/bin/ma_qual_pipeline/alt_aware/xform_pirs_read_info.pl and made it MUCH faster.  Re-sync to pick up these changes. This is the tool that converts the pirs truth read.info format to SAM format.
+
+I will add some commands to run_sim.250--251.sh to have it run dragen-align and calculate mapping accuracy stats.
+
+####################################################################################
+
+I found a bug that's a problem for all ALT contigs aligned in reverse-complement orientation w.r.t. the primary assembly contig (FLAG=16 in hs38DH.fa.alt).  For now if you stick to ALT contigs with FLAG=0 then should be ok.

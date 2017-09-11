@@ -6,107 +6,16 @@ import os
 import sys
 import glob
 import logging
-import vlrd_lib
+from vlrd import vlrd_functions
 import subprocess
-from lib.db_api import DBAPI
-from abc import ABCMeta, abstractmethod, abstractproperty
+from modules_base import ModuleBase
 
 logger = logging.getLogger(__name__)
+this_dir_path = os.path.dirname(os.path.realpath(__file__))
 
 
 ###########################################################
-class ModuleBase(object):
-    """
-    Base class for all modules (pipelines)
-    """
-    __metaclass__ = ABCMeta
-
-    @abstractproperty
-    def name(self):
-        pass
-
-    @abstractproperty
-    def default_settings(self):
-        """
-        a dictionary of key: value pairs that will be
-        used as default module settings
-        :rtype: dict
-        """
-        pass
-
-    @abstractproperty
-    def expected_settings(self):
-        """
-        list the keys that should be in module settings
-        used to validate module settings prior to run
-        :rtype: list
-        """
-        pass
-
-    def __init__(self, pipeline_settings):
-        self.pipeline_settings = pipeline_settings
-        self.dataset_name = None
-        self.module_settings = None
-        self.parse_settings()
-        self.db_api = DBAPI(self.dataset_name)
-
-    def validate_module_settings(self):
-        for key in self.default_settings:
-            if key not in self.module_settings:
-                self.module_settings[key] = self.default_settings[key]
-        for key in self.expected_settings:
-            assert self.module_settings[key], "missing key {} for {}".format(key, self.name)
-
-    def parse_settings(self):
-        for key in ["dataset_name", "module_settings", "outdir", "reference"]:
-            value = self.pipeline_settings.get(key, None)
-            if not value:
-                self.fail("'{}' not specified".format(key), self.name)
-            self.__setattr__(key, value)
-
-        self.module_settings = self.pipeline_settings["module_settings"].get(self.name, {})
-        if not self.module_settings:
-            logging.warning("'{}' not specified within run_config: module_settings".format(self.name))
-
-        # create sub directory for each module
-        self.module_settings['outdir'] = os.path.join(self.outdir, self.name)
-        if not os.path.isdir(self.module_settings['outdir']):
-            try:
-                os.makedirs(self.module_settings['outdir'])
-            except Exception as e:
-                logger.error("Failed to create directory: {}, exception: {}".
-                             format(self.module_settings['outdir'], e))
-
-        self.validate_module_settings()
-
-    def print_module_settings(self):
-        logger.info(self.module_settings)
-
-    @abstractmethod
-    def run(self):
-        pass
-
-    def get_dataset_ref(self):
-        rv = self.db_api.get_dataset_ref_info()
-        self.module_settings["ref_type"] = rv["ref_type"]
-        self.module_settings["ref_fasta"] = rv["fasta"]
-
-    def get_target_bed(self):
-        self.module_settings["target_bed"] = self.db_api.get_target_bed()
-
-    def post_fastas(self, fasta0, fasta1):
-        self.db_api.set_fastas(fasta0, fasta1)
-
-    @staticmethod
-    def fail(msg, mod):
-        msg = "Invalid settings for module: {}, {}".format(mod, msg)
-        logger.error(msg)
-        sys.exit(1)
-
-
-###########################################################
-class VLRDmod(ModuleBase):
-    name = "vlrd"
+class VLRDVCF(ModuleBase):
     default_settings = {}
     expected_settings = ["varrate"]
 
@@ -121,15 +30,95 @@ class VLRDmod(ModuleBase):
                 sys.exit(1)
 
         # run
-        res = vlrd_lib.create_truth_vcf_and_fastas(self.module_settings)
+        res = vlrd_functions.create_truth_vcf_and_fastas(self.module_settings)
         logger.info(res)
         self.db_api.set_fastas(res['fasta0'], res['fasta1'])
         self.db_api.post_truth_vcf(res['truth_vcf'])
 
 
 ###########################################################
+class AltContigVCF(ModuleBase):
+    default_settings = {}
+    expected_settings = ["contig", "alt-contig-1", "alt-contig-2", "alt-sam"]
+
+    def get_alt_contig_lengths(self):
+        """ lookup alt contig length in dict - fix this mock """
+        logger.info("Get alt contig lengths")
+        logger.info(self.module_settings["alt-contig-1"])
+        logger.info(self.module_settings["alt-contig-2"])
+
+        with open(self.module_settings["dict_file"], 'r') as stream:
+            for line in stream:
+                len_col = line.split()[2]
+                if "LN" in len_col:
+                    for c_idx in ["alt-contig-1", "alt-contig-2"]:
+                        contig = self.module_settings[c_idx]
+                        if contig in line:
+                            try:
+                                c_len = int(len_col.replace("LN:", ""))
+                                self.module_settings[c_idx + "-len"] = c_len
+                            except Exception as e:
+                                logger.error("Contig len not found/ integer in line: {}".format(line))
+
+        for i in ["alt-contig-1-len", "alt-contig-2-len"]:
+            assert isinstance(self.module_settings[i], int), "Invalid contig len detected from dict"
+
+    def convert_alt_to_pri_coords(self):
+        """ get coordinates which we'll use for the truth vcf generation """
+        logger.info("Convert the alternate contig to primary coords")
+        alt_to_pri_script = os.path.join(this_dir_path, "alt_contig", "convert_alt_to_pri_coords.pl")
+        alt_contig_sam = "/opt/bwakit-0.7.12-0/resource-GRCh38/hs38DH.fa.alt"
+
+        cmd = "{} {} {} 1 {} 2> /dev/null".format(alt_to_pri_script,
+            alt_contig_sam,
+            self.module_settings["alt-contig-1"],
+            self.module_settings["alt-contig-1-len"])
+        logger.info("Run cmd: {}".format(cmd))
+        res = subprocess.check_output(cmd, shell=True)
+        logger.info("Response: {}".format(res))
+        try:
+            _contig, _from, _to = res.split()[0:3]
+            self.module_settings["main_contig_from"] = _from
+            self.module_settings["main_contig_to"] = _to
+        except Exception as e:
+            logger.error('Failed to align alt-contig-1 to main contig')
+            sys.exit(1)
+
+    def create_modified_fastas(self):
+        fa0 = "{outdir}/mod_fasta_0.fa".format(**self.module_settings)
+        fa1 = "{outdir}/mod_fasta_1.fa".format(**self.module_settings)
+
+        cmd = "samtools faidx {fasta_file} {alt-contig-1}:1-{alt-contig-1-len} > %s" % fa0
+        cmd = cmd.format(**self.module_settings)
+        subprocess.check_call(cmd, shell=True)
+        logger.info("create modified fasta 0: cmd: {}".format(cmd))
+
+        cmd = "samtools faidx {fasta_file} {alt-contig-2}:1-{alt-contig-2-len} > %s" % fa1
+        cmd = cmd.format(**self.module_settings)
+        subprocess.check_call(cmd, shell=True)
+        logger.info("create modified fasta 1: cmd: {}".format(cmd))
+        self.db_api.set_fastas(fa0, fa1)
+
+    def fasta_sam_to_vcf(self):
+        script_path = os.path.join(this_dir_path, "alt_contig", "fasta_sam_to_vcf.pl")
+        self.module_settings["truth_vcf"] = os.path.join(self.module_settings["outdir"], "alt_contig_truth.vcf")
+        cmd = script_path + " {fasta_file} {alt-sam} {alt-contig-1}:1-{alt-contig-1-len} {alt-contig-2}:1-{alt-contig-2-len} {truth_vcf}"
+        cmd = cmd.format(**self.module_settings)
+        logger.info("create truth vcf cmd: {}".format(cmd))
+        subprocess.check_call(cmd, shell=True)
+        self.db_api.post_truth_vcf(self.module_settings["truth_vcf"])
+
+    def run(self):
+        self.before_run()
+        self.get_alt_contig_lengths()
+        self.convert_alt_to_pri_coords()
+        self.create_modified_fastas()
+        self.fasta_sam_to_vcf()
+        logger.info(" - done")
+
+
+###########################################################
 class Pirs(ModuleBase):
-    name = "pirs"
     default_settings = {
         "PE100": "/opt/pirs-2.0.1/Profiles/Base-Calling_Profiles/humNew.PE100.matrix.gz",
         "indels": "/opt/pirs-2.0.1/Profiles/InDel_Profiles/phixv2.InDel.matrix",
@@ -139,12 +128,14 @@ class Pirs(ModuleBase):
 
     def run(self):
         # last minute settings
+        self.before_run()
         rv = self.db_api.get_fastas()
-        self.module_settings['fasta0'] = rv['fasta0']
-        self.module_settings['fasta1'] = rv['fasta1']
-        for f in ['fasta0', 'fasta1']:
-            assert os.path.isfile(self.module_settings[f]), \
-                'Modified %s is not a valid file' % f
+        for fa in ['fasta0', 'fasta1']:
+            if os.path.isfile(self.module_settings.get(fa, "")):
+                self.module_settings[fa] = rv[fa]
+            else:
+                logger.error('Pirs is missing a required modified Fasta')
+                sys.exit(1)
 
         # run
         logger.info('Pirs: simulating reads ...')
@@ -177,29 +168,29 @@ class Pirs(ModuleBase):
 
 ###########################################################
 class RSVSim(ModuleBase):
-    name = "rsvsim"
     default_settings = {}
     expected_settings = []
 
     def run(self):
+        self.before_run()
         pass
 
 
 ###########################################################
 class VCF2Fasta(ModuleBase):
-    name = 'vcf2fasta'
     default_settings = {}
     expected_settings = []
 
     def run(self):
-        logger.info('VCF2Fasta: generating truth fasta ...')
+        self.before_run()
+        pass
 
 
 ###########################################################
 class CompositeDataset(ModuleBase):
-    name = "composite_dataset"
     default_settings = {}
     expected_settings = []
 
     def run(self):
-        logger.info('CompositeDataset: combining datasets with specified allele frequencies ...')
+        self.before_run()
+        pass
