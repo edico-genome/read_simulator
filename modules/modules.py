@@ -145,7 +145,7 @@ class Pirs(ModuleBase):
         log = os.path.join(self.module_settings['outdir'], "pirs.log")
         self.module_settings['pirs_log'] = log
 
-        cmd = "pirs simulate -l 100 -x 30 -o {outdir}" + \
+        cmd = "pirs simulate -l 100 -x 30 -o {outdir}/pirs" + \
             " --insert-len-mean=180 --insert-len-sd=18 --diploid " + \
             " --base-calling-profile={PE100}" + \
             " --indel-error-profile={indels}" + \
@@ -164,9 +164,12 @@ class Pirs(ModuleBase):
             raise
 
         logger.info('find output fastqs')
-        fq1_list = glob.glob(os.path.join(self.module_settings["outdir"], 'pirs', '*1.fq.gz'))
-        fq2_list = glob.glob(os.path.join(self.module_settings["outdir"], 'pirs', '*2.fq.gz'))
-        self.db_api.post_reads(fq1_list[0], fq2_list[0])
+        fq_lists = []
+        for i in ["1", "2"]:
+            p = os.path.join(self.module_settings["outdir"], 'pirs*' + i + '.fq.gz')
+            print(p)
+            fq_lists.append(glob.glob(p))
+        self.db_api.post_reads(fq_lists[0][0], fq_lists[1][0])
 
 
 ###########################################################
