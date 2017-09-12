@@ -51,4 +51,9 @@ class PipelinesBase(object):
             inst.before_run()
             inst.run()
             inst.after_run()
+        msg = "pipeline: {} complete".format(self.name)
+        logger.info(msg)
+        logger.info("-" * 60)
+
+
 

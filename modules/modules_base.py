@@ -66,7 +66,7 @@ class ModuleBase(object):
 
         # create sub directory for each module
         self.module_settings['outdir'] = os.path.join(
-            self.outdir, self.name, self.pipeline_settings['dataset_name'])
+            self.outdir, self.pipeline_settings['dataset_name'], self.name)
         if not os.path.isdir(self.module_settings['outdir']):
             try:
                 logger.info("create module outdir: {}".format(self.module_settings['outdir']))
@@ -82,6 +82,7 @@ class ModuleBase(object):
         logger.info(self.module_settings)
 
     def before_run(self):
+        logger.info("")
         logger.info(" - run module: {}".format(self.name))
 
     def after_run(self):

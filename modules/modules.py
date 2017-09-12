@@ -163,7 +163,7 @@ class Pirs(ModuleBase):
 
         cmd = cmd.format(**self.module_settings)
 
-        logger.info("pirs cmd: {}".format(cmd))
+        logger.info("Pirs cmd: {}".format(cmd))
         try:
             subprocess.check_output(cmd, shell=True)
         except Exception() as e:
@@ -181,7 +181,7 @@ class Pirs(ModuleBase):
         p = os.path.join(self.module_settings["outdir"], 'pirs*read.info.gz')
         l = glob.glob(p)
         if os.path.isfile(l[0]):
-            self.db_api.outputs_dict['read_info'] = p
+            self.db_api.outputs_dict['read_info'] = l[0]
         else:
             raise PipelineExc("Failed to find read_info: {}".format(p))
 
@@ -200,22 +200,26 @@ class AltContigPirsTruthSam(ModuleBase):
     def run(self):
         self.module_settings["truth_sam"] = \
             os.path.join(self.module_settings["outdir"], "truth.sam")
-
         self.update_run_settings()
 
         # test for homozygous alts
         if self.module_settings["alt-contig-1"] == self.module_settings["alt-contig-2"]:
-            cmd = "./xform_pirs_read_info.pl <(zcat {read_info}) {alt-sam} > {truth_sam}"\
-                .format(**self.module_settings)
+            script_path = os.path.join(this_dir_path, "alt_contig", "xform_pirs_read_info.pl")
+            self.module_settings["xform_pirs_read_info"] = script_path
+            cmd = "{xform_pirs_read_info} <(zcat {read_info}) {alt-sam} > {truth_sam}".format(**self.module_settings)
         else:
             raise PipelineExc("Use case not supported")
 
         try:
-            subprocess.check_output(cmd, shell=True)
-            logging.info("Truth sam created: {}".format(self.module_settings["truth_sam"]))
-        except Exception() as e:
+            print("Run cmd: {}".format(cmd))
+            res = subprocess.check_output(cmd, shell=True, executable='/bin/bash')
+            logging.info("Response: {}".format(res))
+            logging.info("Truth sam created: {}".
+                         format(self.module_settings["truth_sam"]))
+            self.db_api.upload_to_db('sam_gold', self.module_settings["truth_sam"])
+        except Exception as e:
             logging.error('Error message %s' % e)
-            raise PipelineExc("Create truth SAM failed: {}".format(e))
+            
 
 
 ###########################################################

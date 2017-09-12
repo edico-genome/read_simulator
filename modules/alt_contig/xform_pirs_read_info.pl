@@ -81,7 +81,7 @@ while(my $line = <$infoFH>) {
 die "Read length setting not found in $readinfoFile." if (not defined $readLen);
 
 # This section parses the Pirs "*.read.info" truth alignments and converts them to SAM
-printf STDERR "Transforming truth alignments\n";
+printf "Transforming truth alignments\n";
 my $numReads = 0;
 my %altToPriXform = ();
 my %cigPosMap = (); 
@@ -206,8 +206,9 @@ while(my $line = <$infoFH>) {
 
   print "$qname\t$flag\t$seq\t$alnPos\t254\t\*\t=\t$pnext\t$tlen\t\*\t\*\t$tags\n";
 
-  printf STDERR "\r$numReads" if ++$numReads % 100000 == 0;
+  print "\r$numReads" if ++$numReads % 100000 == 0;
 }
 close $infoFH;
-printf STDERR "\rTotal reads processed = $numReads\n";
+print "\rTotal reads processed = $numReads\n";
+exit(0);
 
