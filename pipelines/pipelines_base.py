@@ -19,10 +19,10 @@ class PipelinesBase(object):
         logger.info("-" * 60)
         logger.info(msg)
         self.pipeline_settings = settings
+        self.db_api = DBAPI(self.pipeline_settings["dataset_name"])
         self.module_instances = []
         self.instantiate_modules()
         self._class_name = self.__class__.__name__
-        self.db_api = DBAPI(self.pipeline_settings["dataset_name"])
         self.db_api.dataset_create_or_update(
             self.pipeline_settings["dataset_name"],
             self.pipeline_settings["reference"])
@@ -39,7 +39,8 @@ class PipelinesBase(object):
     def instantiate_modules(self):
         """ validate settings prior to run """
         for C in self.modules:
-            inst = C(self.pipeline_settings)
+            #  all modules in same pipeline should share a db instance
+            inst = C(self.pipeline_settings, self.db_api)
             self.module_instances.append(inst)
 
     def run(self):
@@ -47,5 +48,7 @@ class PipelinesBase(object):
         logger.info("-" * 60)
         logger.info(msg)
         for inst in self.module_instances:
+            inst.before_run()
             inst.run()
+            inst.after_run()
 

@@ -4,7 +4,7 @@
     "pipeline_name": "AltContig",
     "dataset_name": "alt_contig_chr6",
     "reference": "hg38",
-    "outdir": "/mnt/tmp",
+    "outdir": "/mnt/archive/sim_data/dSim",
     "module_settings": {
       "AltContigVCF": {
             "contig": "chr6",
@@ -20,7 +20,7 @@
     "pipeline_name": "VLRD",
     "dataset_name": "vlrd_chr1_normalNoise_varRate0.002",
     "reference": "hg19",
-    "outdir": "/mnt/tmp",
+    "outdir": "/mnt/archive/sim_data/dSim",
     "module_settings": {
       "VLRDVCF": {"varrate": 0.002},
       "Pirs": {"useIndelErrors": 0}
@@ -32,7 +32,7 @@
     "pipeline_name": "CompositeDataset",
     "dataset_name": "test_dataset",
     "reference": "hg19",
-    "outdir": "/mnt/tmp",
+    "outdir": "/mnt/archive/sim_data/dSim",
     "module_settings": {
       "composite_dataset": {
         "dataset1": 0.5,

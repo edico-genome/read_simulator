@@ -12,4 +12,4 @@ class VLRD(PipelinesBase):
 
 
 class AltContig(PipelinesBase):
-    modules = [AltContigVCF, Pirs]
+    modules = [AltContigVCF, Pirs, AltContigPirsTruthSam]

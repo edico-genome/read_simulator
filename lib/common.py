@@ -11,3 +11,17 @@ def log_settings(settings):
         logger.info(" - {:20}{:20}".format(key, settings[key]))
     logger.info(line)
 
+
+class PipelineExc(Exception):
+    """
+    only a specific pipeline failed, still continue with next pipelines
+    """
+    pass
+
+
+class Fatal(Exception):
+    """
+    exception in the dsim run, all pipelines abort
+    """
+    pass
+

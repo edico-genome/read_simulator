@@ -19,15 +19,14 @@ class ModuleBase(object):
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self, pipeline_settings):
+    def __init__(self, pipeline_settings, db_api):
         self.name = self.__class__.__name__
         logger.info("- validating module: {}".format(self.name))
         self.pipeline_settings = pipeline_settings
         self.dataset_name = None
         self.module_settings = None
         self.parse_settings()
-        self.db_api = DBAPI(self.dataset_name)
-
+        self.db_api = db_api
 
     @abstractproperty
     def default_settings(self):
@@ -66,7 +65,8 @@ class ModuleBase(object):
             logging.warning("'{}' not specified within run_config: module_settings".format(self.name))
 
         # create sub directory for each module
-        self.module_settings['outdir'] = os.path.join(self.outdir, self.name)
+        self.module_settings['outdir'] = os.path.join(
+            self.outdir, self.name, self.pipeline_settings['dataset_name'])
         if not os.path.isdir(self.module_settings['outdir']):
             try:
                 logger.info("create module outdir: {}".format(self.module_settings['outdir']))
@@ -84,12 +84,12 @@ class ModuleBase(object):
     def before_run(self):
         logger.info(" - run module: {}".format(self.name))
 
-        self.get_dataset_ref()
-        for key in ["ref_type", "fasta_file", "dict_file"]:
-            if not self.module_settings[key]:
-                logger.info("{}, dataset {} missing: {}".format(
-                    self.name, self.dataset_name, key))
-                sys.exit(1)
+    def after_run(self):
+        logger.info(" - done: {}".format(self.name))
+
+    def add_module_settings_to_saved_outputs_dict(self):
+        for key in self.module_settings:
+            self.db_api.outputs_dict[key] = self.module_settings[key]
 
     @abstractmethod
     def run(self):

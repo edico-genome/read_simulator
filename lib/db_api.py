@@ -4,6 +4,7 @@ Methods to GET/ POST from DB/ LOOKUP TABLE
 import requests
 import logging
 import json
+import sys
 import os
 
 
@@ -11,17 +12,13 @@ logger = logging.getLogger(__name__)
 
 
 class DBAPI(object):
-    # lookup table for shared results
-    # must be available across modules
-    outputs_dict = {}
-
     def __init__(self, dataset_name):
         self.dataset_name = dataset_name
-        self.outputs_dict[dataset_name] = {}
+        self.outputs_dict = {}
+
 
     ###################################
     # GET METHODS
-
     @staticmethod
     def get_from_db(__dataset_name, key_name):
         url = "http://data.edicogenome.com/api/get"
@@ -57,8 +54,8 @@ class DBAPI(object):
         return bed
 
     def get_fastas(self):
-        fasta0 = self.outputs_dict[self.dataset_name].get('fasta0')
-        fasta1 = self.outputs_dict[self.dataset_name].get('fasta1')
+        fasta0 = self.outputs_dict.get('fasta0')
+        fasta1 = self.outputs_dict.get('fasta1')
         for idx, f in enumerate([fasta0, fasta1]):
             if f and os.path.isfile(f):
                 logger.info("Detected fasta file: {}".format(f))
@@ -71,11 +68,11 @@ class DBAPI(object):
     def set_fastas(self, fasta0, fasta1):
         for f in [fasta0, fasta1]:
             continue
-            if not os.path.isfile(fasta0):
+            if not os.path.isfile(f):
                 raise Exception("Not a valid fasta: {}".format(f))
-        self.outputs_dict[self.dataset_name] = {}
-        self.outputs_dict[self.dataset_name]['fasta0'] = fasta0
-        self.outputs_dict[self.dataset_name]['fasta1'] = fasta1
+        self.outputs_dict['fasta0'] = fasta0
+        self.outputs_dict['fasta1'] = fasta1
+
 
     def upload_to_db(self, key_name, value):
         """ this dataset must already exist """

@@ -9,6 +9,7 @@ import logging
 from vlrd import vlrd_functions
 import subprocess
 from modules_base import ModuleBase
+from lib.common import PipelineExc
 
 logger = logging.getLogger(__name__)
 this_dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -19,17 +20,17 @@ class VLRDVCF(ModuleBase):
     default_settings = {}
     expected_settings = ["varrate"]
 
-    def run(self):
-        # get last minute settings
+    def get_refs(self):
         self.get_dataset_ref()
         self.get_target_bed()
-
-        for key in ["ref_type", "ref_fasta", "target_bed"]:
+        for key in ["ref_type", "fasta_file", "dict_file"]:
             if not self.module_settings[key]:
-                print "VLRD, dataset {} missing: {}".format(self.dataset_name, key)
+                logger.info("{}, dataset {} missing: {}".format(
+                    self.name, self.dataset_name, key))
                 sys.exit(1)
 
-        # run
+    def run(self):
+        self.get_refs()
         res = vlrd_functions.create_truth_vcf_and_fastas(self.module_settings)
         logger.info(res)
         self.db_api.set_fastas(res['fasta0'], res['fasta1'])
@@ -41,8 +42,16 @@ class AltContigVCF(ModuleBase):
     default_settings = {}
     expected_settings = ["contig", "alt-contig-1", "alt-contig-2", "alt-sam"]
 
+    def get_refs(self):
+        self.get_dataset_ref()
+        for key in ["ref_type", "fasta_file", "dict_file"]:
+            if not self.module_settings[key]:
+                logger.info("{}, dataset {} missing: {}".format(
+                    self.name, self.dataset_name, key))
+                sys.exit(1)
+
     def get_alt_contig_lengths(self):
-        """ lookup alt contig length in dict - fix this mock """
+        """ lookup alt contig length in dict """
         logger.info("Get alt contig lengths")
 
         with open(self.module_settings["dict_file"], 'r') as stream:
@@ -65,13 +74,13 @@ class AltContigVCF(ModuleBase):
     def convert_alt_to_pri_coords(self):
         """ get coordinates which we'll use for the truth vcf generation """
         logger.info("Convert the alternate contig to primary coords")
-        alt_to_pri_script = os.path.join(this_dir_path, "alt_contig", "convert_alt_to_pri_coords.pl")
-        alt_contig_sam = "/opt/bwakit-0.7.12-0/resource-GRCh38/hs38DH.fa.alt"
 
-        cmd = "{} {} {} 1 {} 2> /dev/null".format(alt_to_pri_script,
-            alt_contig_sam,
-            self.module_settings["alt-contig-1"],
-            self.module_settings["alt-contig-1-len"])
+        self.module_settings["alt_to_pri_script"] = \
+            os.path.join(this_dir_path, "alt_contig", "convert_alt_to_pri_coords.pl")
+
+        cmd = "{alt_to_pri_script} {alt-sam} {alt-contig-1} 1 {alt-contig-1-len} 2> /dev/null"\
+            .format(**self.module_settings)
+
         logger.info("Run cmd: {}".format(cmd))
         res = subprocess.check_output(cmd, shell=True)
         logger.info("Response: {}".format(res))
@@ -111,12 +120,12 @@ class AltContigVCF(ModuleBase):
         self.db_api.post_truth_vcf(self.module_settings["truth_vcf"])
 
     def run(self):
-        self.before_run()
+        self.get_refs()
         self.get_alt_contig_lengths()
         self.convert_alt_to_pri_coords()
         self.create_modified_fastas()
         self.fasta_sam_to_vcf()
-        logger.info(" - done")
+        self.add_module_settings_to_saved_outputs_dict()
 
 
 ###########################################################
@@ -129,8 +138,6 @@ class Pirs(ModuleBase):
     expected_settings = ["PE100", "indels", "gcdep"]
 
     def run(self):
-        # last minute settings
-        self.before_run()
         try:
             rv = self.db_api.get_fastas()
             for fa in ['fasta0', 'fasta1']:
@@ -163,13 +170,52 @@ class Pirs(ModuleBase):
             logging.error('Error message %s' % e)
             raise
 
-        logger.info('find output fastqs')
+        logger.info('find the pirs generated FQs and upload to DB')
         fq_lists = []
         for i in ["1", "2"]:
             p = os.path.join(self.module_settings["outdir"], 'pirs*' + i + '.fq.gz')
             print(p)
             fq_lists.append(glob.glob(p))
         self.db_api.post_reads(fq_lists[0][0], fq_lists[1][0])
+
+        p = os.path.join(self.module_settings["outdir"], 'pirs*read.info.gz')
+        l = glob.glob(p)
+        if os.path.isfile(l[0]):
+            self.db_api.outputs_dict['read_info'] = p
+        else:
+            raise PipelineExc("Failed to find read_info: {}".format(p))
+
+
+###########################################################
+class AltContigPirsTruthSam(ModuleBase):
+    default_settings = {}
+    expected_settings = []
+
+    def update_run_settings(self):
+        """ get settings from previous runs """
+        for key in ["contig", "alt-contig-1", "alt-contig-2", "alt-sam", "read_info"]:
+            if key in self.db_api.outputs_dict:
+                self.module_settings[key] = self.db_api.outputs_dict[key]
+
+    def run(self):
+        self.module_settings["truth_sam"] = \
+            os.path.join(self.module_settings["outdir"], "truth.sam")
+
+        self.update_run_settings()
+
+        # test for homozygous alts
+        if self.module_settings["alt-contig-1"] == self.module_settings["alt-contig-2"]:
+            cmd = "./xform_pirs_read_info.pl <(zcat {read_info}) {alt-sam} > {truth_sam}"\
+                .format(**self.module_settings)
+        else:
+            raise PipelineExc("Use case not supported")
+
+        try:
+            subprocess.check_output(cmd, shell=True)
+            logging.info("Truth sam created: {}".format(self.module_settings["truth_sam"]))
+        except Exception() as e:
+            logging.error('Error message %s' % e)
+            raise PipelineExc("Create truth SAM failed: {}".format(e))
 
 
 ###########################################################
