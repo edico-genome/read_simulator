@@ -12,6 +12,7 @@ from modules_base import ModuleBase
 from lib.common import PipelineExc
 from enum import Enum
 
+
 logger = logging.getLogger(__name__)
 this_dir_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -48,14 +49,15 @@ class VLRDVCF(ModuleBase):
 
 
 ###########################################################
+class ContigComboType(Enum):
+    alt_prim = 1
+    same_alts = 2
+    diff_alts = 3
+
+
 class AltContigVCF(ModuleBase):
     default_settings = {}
     expected_settings = ["contig-1", "contig-2", "alt-sam"]
-    class ContigComboType(Enum):
-        alt_prim = 1
-        same_alts = 2
-        diff_alts = 3
-
 
     def identify_contig_types_and_use_case(self):
         """
@@ -77,18 +79,18 @@ class AltContigVCF(ModuleBase):
         if all(contig_is_primary.values()):  # if all([contig_is_primary[key] for key in ["contig-1", "contig-2"]):
             raise PipelineExc("Use case not supported where both contigs are primary")
 
-        # use case 1: is one contigs primary & the other contig an alt?
+        # one contig is an alt and the other is a primary
         elif contig_is_primary["contig-1"] != contig_is_primary["contig-2"]:
-            use_case = 1
             self.module_settings["contigs_combo_type"] = ContigComboType.alt_prim
 
-            # make contig-2 the primary, this way contig1 will always be an alt
+            # standardize with contig-2 being the primary
+            # contig 1 will now always be an alt
             if contig_is_primary["contig-1"]:
                 _tmp = self.module_settings["contig-1"]
                 self.module_settings["contig-1"] = self.module_settings["contig-2"]
                 self.module_settings["contig-2"] = _tmp
 
-        # use case 1/ 2: are both alts?
+        # both contigs are alt-contigs
         else:
             # are they the same alt?
             if self.module_settings["contig-1"] == self.module_settings["contig-2"]:
@@ -96,12 +98,10 @@ class AltContigVCF(ModuleBase):
             else:
                 self.module_settings["contigs_combo_type"] = ContigComboType.diff_alts
 
-        self.module_settings["contigs_combo_type"] = use_case
-        assert self.module_settings["contigs_combo_type"] in [1, 2, 3],\
+        assert isinstance(self.module_settings["contigs_combo_type"], ContigComboType), \
             "invalid contigs specified"
 
     def get_contig_length_from_dict_file(self, contig_key):
-
         """ lookup alt contig length in dict """
         assert contig_key in ["contig-1", "contig-2"]
         logger.info("Get contig {} ranges".format(contig_key))
@@ -138,7 +138,7 @@ class AltContigVCF(ModuleBase):
         now find corresponding region in primary """
 
         # get contig 1 start stop indexes
-        self.get_contig_length_from_dict_file(self, "contig-1")
+        self.get_contig_length_from_dict_file("contig-1")
 
         # get primary contig start stop indexes
         logger.info("find primary contig start stop indexes")
@@ -185,8 +185,9 @@ class AltContigVCF(ModuleBase):
                 raise PipelineExc('Failed to find start-stop indexes in alt-contig-2 {}'.format(e))
 
     def create_modified_fastas(self):
+        """ create fastas for read simulator """
 
-        def check_call(cmd):
+        def check_call():
             try:
                 logger.info(cmd)
                 subprocess.check_call(cmd, shell=True)
@@ -203,11 +204,7 @@ class AltContigVCF(ModuleBase):
                              self.module_settings[c + "-from"],
                              self.module_settings[c + "-to"],
                              fastas[c])
-            try:
-                logger.info(cmd)
-                subprocess.check_call(cmd, shell=True)
-            except Exception as e:
-                raise PipelineExc(e)
+            check_call()
 
         self.db_api.set_fastas(fastas["contig-1"], fastas["contig-2"])
 
