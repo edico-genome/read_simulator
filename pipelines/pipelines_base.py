@@ -20,7 +20,8 @@ class PipelinesBase(object):
         logger.info(msg)
         self.exit_status = "FAILED"
         self.pipeline_settings = settings
-        self.db_api = DBAPI(self.pipeline_settings["dataset_name"])
+        self.dataset_name = self.pipeline_settings["dataset_name"]
+        self.db_api = DBAPI(self.dataset_name)
         self.module_instances = []
         self.instantiate_modules()
         self._class_name = self.__class__.__name__
@@ -51,8 +52,6 @@ class PipelinesBase(object):
                 inst.before_run()
                 inst.run()
                 inst.after_run()
-                msg = "pipeline: {} complete".format(self.name)
-                logger.info(msg)
                 self.exit_status = "COMPLETED"
             except PipelineExc as e:
                 logger.error("Pipeline Failed: {}; reason: {}.\n\nContinue with next pipeline ..."

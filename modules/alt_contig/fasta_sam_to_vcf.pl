@@ -472,6 +472,10 @@ $foo = scalar @var2_keys;
 
 my @sorted_keys = uniq (sort { $a <=> $b } (keys(%$seq1_vars), keys(%$seq2_vars) ) );
 
+# print VCF headers ( required for RTG )
+
+print "##fileformat=VCFv4.2\n";
+print "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE\n";
 
 # Now write out our VCF with the variants in the two haplotypes.
 
@@ -559,5 +563,5 @@ for my $poskey (@sorted_keys) {
          $info .= ";SVLEN2=$hap2_len";
       }
    }
-   print "$pri_name\t$poskey\t$VARID\t$ref\t$alt\t$QUAL\t$FILTER\t$info\t$FORMAT\t$gtype\n"
+   print "$pri_name\t$poskey\t$VARID\t$ref\t$alt\t$QUAL\t$FILTER\t$info\t$FORMAT\t$gtype\n";
 }

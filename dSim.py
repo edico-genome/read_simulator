@@ -59,8 +59,10 @@ def run_pipelines(pipelines):
 
     logger.info("\nSIMULATOR SUMMARY\n")
     for pipeline in pipelines:
-        logger.info("{} {}".format(pipeline.name, pipeline.exit_status))
-
+        logger.info("{} {} {}".format(
+                pipeline.name,
+                pipeline.dataset_name,
+                pipeline.exit_status))
 
 
 ############################################################

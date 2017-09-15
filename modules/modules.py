@@ -98,22 +98,19 @@ class AltContigVCF(ModuleBase):
             else:
                 self.module_settings["contigs_combo_type"] = ContigComboType.diff_alts
 
-        assert isinstance(self.module_settings["contigs_combo_type"], ContigComboType), \
-            "invalid contigs specified"
-
     def get_contig_length_from_dict_file(self, contig_key):
         """ lookup alt contig length in dict """
         assert contig_key in ["contig-1", "contig-2"]
         logger.info("Get contig {} ranges".format(contig_key))
 
         with open(self.module_settings["dict_file"], 'r') as stream:
-            # start = 1
-            self.module_settings[contig_key] = 1
 
             c_idx = contig_key
-            c_idx_to = c_idx + "-to"
             c_idx_from = c_idx + "-from"
+            c_idx_to = c_idx + "-to"
             contig_name = self.module_settings[c_idx]
+
+            self.module_settings[c_idx_from] = 1
 
             # end = length of contig
             for line in stream:
@@ -159,11 +156,13 @@ class AltContigVCF(ModuleBase):
         except Exception as e:
             raise PipelineExc('Failed to find start-stop index in primary {}'.format(e))
 
+        # import pdb; pdb.set_trace()
+
         # get contig 2 start stop indexes ( context specific )
         logger.info("find indexes in alt-contig 2 that corresponds to subrange in primary ")
         if self.module_settings["contigs_combo_type"] == ContigComboType.alt_prim:
             self.module_settings["contig-2-from"] = self.module_settings["contig-primary-from"]
-            self.module_settings["contig-2-to"] = self.module_settings["contig-primary-from"]
+            self.module_settings["contig-2-to"] = self.module_settings["contig-primary-to"]
         elif self.module_settings["contigs_combo_type"] == ContigComboType.same_alts:
             self.module_settings["contig-2-from"] = self.module_settings["contig-1-from"] 
             self.module_settings["contig-2-to"] = self.module_settings["contig-1-to"] 
