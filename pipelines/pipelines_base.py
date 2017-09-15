@@ -1,7 +1,7 @@
 from abc import ABCMeta, abstractproperty
 from lib.db_api import DBAPI
 from lib.common import PipelineExc
-import logging
+import logging, sys
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +55,9 @@ class PipelinesBase(object):
                 logger.info(msg)
                 self.exit_status = "COMPLETED"
             except PipelineExc as e:
-                logger.error("Pipeline Failed: {}; reason: {}.\nContinue with next pipeline ..."
+                logger.error("Pipeline Failed: {}; reason: {}.\n\nContinue with next pipeline ..."
                              .format(self.name, e))
-                break
+                return
             except Exception as e:
                 logger.error("Fatal error: {}".format(e), exc_info=True)
-
-
-
-
+                sys.exit(1)

@@ -10,6 +10,7 @@ from vlrd import vlrd_functions
 import subprocess
 from modules_base import ModuleBase
 from lib.common import PipelineExc
+from enum import Enum
 
 logger = logging.getLogger(__name__)
 this_dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -50,6 +51,11 @@ class VLRDVCF(ModuleBase):
 class AltContigVCF(ModuleBase):
     default_settings = {}
     expected_settings = ["contig-1", "contig-2", "alt-sam"]
+    class ContigComboType(Enum):
+        alt_prim = 1
+        same_alts = 2
+        diff_alts = 3
+
 
     def identify_contig_types_and_use_case(self):
         """
@@ -74,7 +80,9 @@ class AltContigVCF(ModuleBase):
         # use case 1: is one contigs primary & the other contig an alt?
         elif contig_is_primary["contig-1"] != contig_is_primary["contig-2"]:
             use_case = 1
-            # make contig-2 the primary
+            self.module_settings["contigs_combo_type"] = ContigComboType.alt_prim
+
+            # make contig-2 the primary, this way contig1 will always be an alt
             if contig_is_primary["contig-1"]:
                 _tmp = self.module_settings["contig-1"]
                 self.module_settings["contig-1"] = self.module_settings["contig-2"]
@@ -84,47 +92,56 @@ class AltContigVCF(ModuleBase):
         else:
             # are they the same alt?
             if self.module_settings["contig-1"] == self.module_settings["contig-2"]:
-                use_case = 2
+                self.module_settings["contigs_combo_type"] = ContigComboType.same_alts
             else:
-                use_case = 3
+                self.module_settings["contigs_combo_type"] = ContigComboType.diff_alts
 
         self.module_settings["contigs_combo_type"] = use_case
         assert self.module_settings["contigs_combo_type"] in [1, 2, 3],\
             "invalid contigs specified"
 
-    def get_contig_ranges(self):
+    def get_contig_length_from_dict_file(self, contig_key):
+
         """ lookup alt contig length in dict """
-        logger.info("Get contig ranges")
+        assert contig_key in ["contig-1", "contig-2"]
+        logger.info("Get contig {} ranges".format(contig_key))
 
         with open(self.module_settings["dict_file"], 'r') as stream:
-            # set from equal to 1
-            self.module_settings["contig-1-from"] = 1
-            self.module_settings["contig-2-from"] = 1
+            # start = 1
+            self.module_settings[contig_key] = 1
 
-            # set "to" equal to length of contig
+            c_idx = contig_key
+            c_idx_to = c_idx + "-to"
+            c_idx_from = c_idx + "-from"
+            contig_name = self.module_settings[c_idx]
+
+            # end = length of contig
             for line in stream:
                 len_col = line.split()[2]
                 if "LN" in len_col:
-                    for c_idx in ["contig-1", "contig-2"]:
-                        c_idx_to = c_idx + "-to"
-                        contig = self.module_settings[c_idx]
-                        if contig in line:
-                            try:
-                                c_len = int(len_col.replace("LN:", ""))
-                                self.module_settings[c_idx_to] = c_len
-                                logger.debug("{}: {}".format(c_idx, c_len))
-                            except Exception as e:
-                                logger.error("Contig len not found in line: {}".format(line))
-                                logger.error(e)
+                    if contig_name in line:
+                        try:
+                            c_len = int(len_col.replace("LN:", ""))
+                            self.module_settings[c_idx_to] = c_len
+                            logger.debug("{}: {}".format(c_idx, c_len))
+                        except Exception as e:
+                            logger.error("Contig len not found in line: {}".format(line))
+                            logger.error(e)
 
-        for i in ["contig-1-from", "contig-2-from", "contig-1-to", "contig-2-to"]:
+        for i in [c_idx_from, c_idx_to]:
             assert isinstance(self.module_settings[i], int), \
                 "Invalid contig ranges detected"
 
-    def get_subrange_of_primary(self):
-        """ find _from and _to indexes in primary that corresponds to the contig 1
-         contig 1 will always be an alt contig """
-        logger.info("find indexes in primary that corresponds to alt-contig 1 ")
+    def get_contig_start_stop_indexes(self):
+        """ a specific range will be available on the primary, alt 1 and alt 2 
+        if assume the whole of alt 1 will be represented
+        now find corresponding region in primary """
+
+        # get contig 1 start stop indexes
+        self.get_contig_length_from_dict_file(self, "contig-1")
+
+        # get primary contig start stop indexes
+        logger.info("find primary contig start stop indexes")
         _alt_to_pri_script = os.path.join(this_dir_path, "alt_contig", "convert_alt_to_pri_coords.pl")
         cmd = "{} {} {} 1 {} 2> /dev/null".format(
             _alt_to_pri_script,
@@ -136,53 +153,46 @@ class AltContigVCF(ModuleBase):
         res = check_output(cmd)
 
         try:
-            _contig, _from, _to = res.split()[0:3]
+            _from, _to = res.split()[1:3]
             self.module_settings["contig-primary-from"] = _from
             self.module_settings["contig-primary-to"] = _to
         except Exception as e:
-            logger.error('Failed to align alt contig 1 to primary')
-            logger.error(e)
-            sys.exit(1)
+            raise PipelineExc('Failed to find start-stop index in primary {}'.format(e))
 
-    def get_subrange_of_contig2(self):
-        """ find _from and _to indexes in alt-contig 2 that corresponds to subrange in primary """
+        # get contig 2 start stop indexes ( context specific )
         logger.info("find indexes in alt-contig 2 that corresponds to subrange in primary ")
-        _pri_to_alt_script = os.path.join(this_dir_path, "alt_contig", "convert_pri_to_alt_coords.pl")
-
-        cmd = "{} {} {} {} {} 2> /dev/null".format(
-            _pri_to_alt_script,
-            self.module_settings["alt-sam"],
-            self.module_settings["contig-2"],
-            self.module_settings["contig-primary-from"],
-            self.module_settings["contig-primary-to"])
-
-        res = check_output(cmd)
-        try:
-            _contig, _from, _to = res.split()[0:3]
-            self.module_settings["contig-2-from"] = _from
-            self.module_settings["contig-2-to"] = _to
-        except Exception as e:
-            logger.error('Failed to align alt contig 1 to primary')
-            logger.error(e)
-            sys.exit(1)
-
-    def get_ranges_where_contigs_match(self):
-        """ get coordinates which we'll use for the truth vcf generation
-            the coordinates depend on the combo types
-            1. primary + alt_contig ( we also want to standardize this order )
-            2. alt_contig1 + alt_contig1
-            3. alt_contig1 + alt_contig2(any 2 different, but related, contigs)
-        """
-
-        # contig-1 will always be an alt contig ( use case 1, 2 and 3 )
-        self.get_subrange_of_primary()
-
-        # if contig2 is also an alt contig, and differs from contig 1
-        # then we need to update it's range so that it aligns to contig 1
-        if self.module_settings["contigs_combo_type"] == 3:
-            self.get_subrange_of_contig2()
+        if self.module_settings["contigs_combo_type"] == ContigComboType.alt_prim:
+            self.module_settings["contig-2-from"] = self.module_settings["contig-primary-from"]
+            self.module_settings["contig-2-to"] = self.module_settings["contig-primary-from"]
+        elif self.module_settings["contigs_combo_type"] == ContigComboType.same_alts:
+            self.module_settings["contig-2-from"] = self.module_settings["contig-1-from"] 
+            self.module_settings["contig-2-to"] = self.module_settings["contig-1-to"] 
+        elif self.module_settings["contigs_combo_type"] == ContigComboType.diff_alts:
+            # find range in contig 2 ( alt contig ) that maps to alt contig 1
+            _pri_to_alt_script = os.path.join(this_dir_path, "alt_contig", "convert_pri_to_alt_coords.pl")
+            cmd = "{} {} {} {} {} 2> /dev/null".format(
+                _pri_to_alt_script,
+                self.module_settings["alt-sam"],
+                self.module_settings["contig-2"],
+                self.module_settings["contig-primary-from"],
+                self.module_settings["contig-primary-to"])
+            res = check_output(cmd)
+            try:
+                _from, _to = res.split()[4:6]
+                self.module_settings["contig-2-from"] = _from
+                self.module_settings["contig-2-to"] = _to
+            except Exception as e:
+                raise PipelineExc('Failed to find start-stop indexes in alt-contig-2 {}'.format(e))
 
     def create_modified_fastas(self):
+
+        def check_call(cmd):
+            try:
+                logger.info(cmd)
+                subprocess.check_call(cmd, shell=True)
+            except Exception as e:
+                raise PipelineExc(e)
+
         fastas = {"contig-1": "{outdir}/mod_fasta_0.fa".format(**self.module_settings),
                   "contig-2": "{outdir}/mod_fasta_1.fa".format(**self.module_settings)}
 
@@ -194,6 +204,7 @@ class AltContigVCF(ModuleBase):
                              self.module_settings[c + "-to"],
                              fastas[c])
             try:
+                logger.info(cmd)
                 subprocess.check_call(cmd, shell=True)
             except Exception as e:
                 raise PipelineExc(e)
@@ -206,19 +217,16 @@ class AltContigVCF(ModuleBase):
         cmd = script_path + " {fasta_file} {alt-sam} {contig-1}:{contig-1-from}-{contig-1-to} " + \
             "{contig-2}:{contig-2-from}-{contig-2-to} > {truth_vcf}"
         cmd = cmd.format(**self.module_settings)
-        logger.info("create truth vcf cmd: {}".format(cmd))
-
-        try:
+        try: 
             check_output(cmd)
         except Exception as e:
-            raise Exception('Failed to create truth VCF: {}'.format(e))
+            raise PipelineExc("Failed to create truth VCF: {}".format(e))
         self.db_api.post_truth_vcf(self.module_settings["truth_vcf"])
 
     def run(self):
         self.get_dataset_ref()
         self.identify_contig_types_and_use_case()
-        self.get_contig_ranges()
-        self.get_ranges_where_contigs_match()
+        self.get_contig_start_stop_indexes()
         self.create_modified_fastas()
         self.create_truth_vcf()
         # self.add_module_settings_to_saved_outputs_dict()
@@ -313,6 +321,7 @@ class AltContigPirsTruthSam(ModuleBase):
             self.db_api.upload_to_db('sam_gold', self.module_settings["truth_sam"])
         except Exception as e:
             logging.error('Error message %s' % e)
+            raise
 
 
 ###########################################################

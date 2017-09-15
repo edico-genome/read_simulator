@@ -1,6 +1,7 @@
 """
 Methods to GET/ POST from DB/ LOOKUP TABLE
 """
+from pprint import pprint
 import requests
 import logging
 import json
@@ -82,7 +83,8 @@ class DBAPI(object):
             'value': value
             }
 
-        logger.info("Uploading to db, Url: {}, Data: {}".format(url, data))
+        logger.info("Uploading to db, Url: {}".format(url))
+        logger.info(pprint(data))
         res = requests.post(url, params=data)
         res.raise_for_status()
 
