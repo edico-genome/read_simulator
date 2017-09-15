@@ -9,7 +9,6 @@ logger = logging.getLogger(__name__)
 class Settings(object):
     def __init__(self, run_settings_file):
         self.runs = self.load_config(run_settings_file)
-        self.print_settings(self.runs, "INPUT")
 
     @staticmethod
     def load_config(f_path):
@@ -31,12 +30,7 @@ class Settings(object):
             default_flow_style=False)
         logger.info(y)
 
-    def print_settings(self, settings, msg=None):
-        msg = '\nSETTINGS {}'.format(msg) if msg else '\nSETTINGS'
-        logger.info(msg)
-        line = "-" * 50
-        logger.info(line)
+    def print_settings(self, settings):
         for idx, run in enumerate(settings):
-            logger.info("")
-            logger.info("Run {}".format(idx+1))
+            logger.info("RUN {}".format(idx+1))
             self.log_yaml(run)

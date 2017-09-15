@@ -5,7 +5,7 @@ A module defines a unit of work ( creating a truth VCF/ fasta etc )
 import os
 import sys
 import logging
-from lib.db_api import DBAPI
+from lib.common import PipelineExc
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 logger = logging.getLogger(__name__)
@@ -83,10 +83,10 @@ class ModuleBase(object):
 
     def before_run(self):
         logger.info("")
-        logger.info(" - run module: {}".format(self.name))
+        logger.info("- module: {}".format(self.name))
 
     def after_run(self):
-        logger.info(" - done: {}".format(self.name))
+        logger.info("- done: {}".format(self.name))
 
     def add_module_settings_to_saved_outputs_dict(self):
         for key in self.module_settings:
@@ -98,9 +98,14 @@ class ModuleBase(object):
 
     def get_dataset_ref(self):
         rv = self.db_api.get_dataset_ref_info()
-        self.module_settings["ref_type"] = rv["ref_type"]
-        self.module_settings["fasta_file"] = rv["fasta_file"]
-        self.module_settings["dict_file"] = rv["dict_file"]
+
+        keys = ["ref_type", "fasta_file", "dict_file"]
+        for key in keys:
+            self.module_settings[key] = rv[key]
+            if not self.module_settings[key]:
+                msg = "{}, dataset {} missing: {}"
+                msg = msg.format(self.name, self.dataset_name, key)
+                raise PipelineExc(msg)
 
     def get_target_bed(self):
         self.module_settings["target_bed"] = self.db_api.get_target_bed()

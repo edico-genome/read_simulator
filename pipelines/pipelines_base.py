@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractproperty
 from lib.db_api import DBAPI
+from lib.common import PipelineExc
 import logging
 
 logger = logging.getLogger(__name__)
@@ -16,8 +17,8 @@ class PipelinesBase(object):
 
     def __init__(self, settings):
         msg = "validating pipeline: {}".format(self.__class__.__name__)
-        logger.info("-" * 60)
         logger.info(msg)
+        self.exit_status = "FAILED"
         self.pipeline_settings = settings
         self.db_api = DBAPI(self.pipeline_settings["dataset_name"])
         self.module_instances = []
@@ -44,16 +45,22 @@ class PipelinesBase(object):
             self.module_instances.append(inst)
 
     def run(self):
-        msg = "running pipeline: {}".format(self.name)
-        logger.info("-" * 60)
-        logger.info(msg)
+        logger.info("\nPIPELINE: {}".format(self.name))
         for inst in self.module_instances:
-            inst.before_run()
-            inst.run()
-            inst.after_run()
-        msg = "pipeline: {} complete".format(self.name)
-        logger.info(msg)
-        logger.info("-" * 60)
+            try:
+                inst.before_run()
+                inst.run()
+                inst.after_run()
+                msg = "pipeline: {} complete".format(self.name)
+                logger.info(msg)
+                self.exit_status = "COMPLETED"
+            except PipelineExc as e:
+                logger.error("Pipeline Failed: {}; reason: {}.\nContinue with next pipeline ..."
+                             .format(self.name, e))
+                break
+            except Exception as e:
+                logger.error("Fatal error: {}".format(e), exc_info=True)
+
 
 
 

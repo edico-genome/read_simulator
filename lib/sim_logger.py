@@ -7,7 +7,7 @@ log_file_detail = str(log_file_detail).split('.')[0].replace(
     '-', '_').replace(' ', '__').replace(':', '_')
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
-dir_path = os.path.join(dir_path, 'logs')
+dir_path = os.path.join(dir_path, '..', 'logs')
 
 if not os.path.isdir(dir_path):
     os.makedirs(dir_path)

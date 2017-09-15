@@ -67,12 +67,11 @@ class DBAPI(object):
     # UPLOAD METHODS
     def set_fastas(self, fasta0, fasta1):
         for f in [fasta0, fasta1]:
-            continue
+            # continue
             if not os.path.isfile(f):
                 raise Exception("Not a valid fasta: {}".format(f))
         self.outputs_dict['fasta0'] = fasta0
         self.outputs_dict['fasta1'] = fasta1
-
 
     def upload_to_db(self, key_name, value):
         """ this dataset must already exist """
@@ -113,7 +112,6 @@ class DBAPI(object):
         else:
             logger.info("Dataset does not exist: create new")
             self.create_dna_dataset(dataset_name, reference_type)
-
 
     def create_dna_dataset(self, dataset_name, reference_type):
         data = {

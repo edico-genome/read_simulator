@@ -13,8 +13,8 @@ logger = sim_logger.logging.getLogger(__name__)
 
 def is_venv():
     """ confirm we are running in a virtualenv """
-    return (hasattr(sys, 'real_prefix') or
-            (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix))
+    return ((hasattr(sys, 'real_prefix') or
+        (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)))
 
 
 def pipeline_factory(pipeline_settings):
@@ -23,16 +23,17 @@ def pipeline_factory(pipeline_settings):
     """
     ThisPipelineClass = None
     ThisPipelineClass = getattr(pipelines, pipeline_settings["pipeline_name"])
-    assert issubclass(ThisPipelineClass, pipelines.PipelinesBase), "This is not a valid pipeline: {}".format(c.name)
-
 
     if not ThisPipelineClass:
-        logger.error("Please ensure pipeline: {} is registered and valid".format(
+        logger.error("Please ensure pipeline: {} is registered".format(
             pipeline_settings['pipeline_name']))
         sys.exit(1)
 
-    p = ThisPipelineClass(pipeline_settings)
-    return p
+    assert issubclass(ThisPipelineClass, pipelines.PipelinesBase),\
+        "Please ensure pipeline: {} is a valid subclass of type pipeline: {}"\
+        .format(pipeline_settings["pipeline_name"])
+
+    return ThisPipelineClass
 
 
 def instantiate_pipelines():
@@ -40,21 +41,26 @@ def instantiate_pipelines():
     instantiate pipelines and validate pipeline settings
     """
     pipelines = []
-    logger.info("\n\nValidating pipelines")
+    logger.info("\nVALIDATING PIPELINES\n")
     for pipeline_settings in settings.runs:
-        # default on
         if pipeline_settings.get("on/off", "on") in [0, None, "off"]:
             continue
         else:
-            p = pipeline_factory(pipeline_settings)
+            Pipeline = pipeline_factory(pipeline_settings)
+            p = Pipeline(pipeline_settings)
             pipelines.append(p)
     return pipelines
 
 
 def run_pipelines(pipelines):
-    logger.info("\n\nRunning pipelines")
+    logger.info("\nRUNNING PIPELINES\n")
     for pipeline in pipelines:
         pipeline.run()
+
+    logger.info("\nSIMULATOR SUMMARY\n")
+    for pipeline in pipelines:
+        logger.info("{} {}".format(pipeline.name, pipeline.exit_status))
+
 
 
 ############################################################
@@ -76,6 +82,8 @@ if __name__ == '__main__':
     parser.add_argument('-r', '--run_settings', action='store', required=True)
     args = parser.parse_args()
 
+    logger.info("\nINPUT SETTINGS\n")
     settings = Settings(args.run_settings)
+
     main()
-    logger.info("Simulator Complete")
+
