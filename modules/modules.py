@@ -225,7 +225,7 @@ class AltContigVCF(ModuleBase):
         self.get_contig_start_stop_indexes()
         self.create_modified_fastas()
         self.create_truth_vcf()
-        # self.add_module_settings_to_saved_outputs_dict()
+        self.add_module_settings_to_saved_outputs_dict()
 
 
 ###########################################################
@@ -290,34 +290,54 @@ class AltContigPirsTruthSam(ModuleBase):
     default_settings = {}
     expected_settings = []
 
-    def update_run_settings(self):
-        """ get settings from previous runs """
-        for key in ["contig", "alt-contig-1", "alt-contig-2", "alt-sam", "read_info"]:
+    def run(self):
+        # truth sam
+        self.module_settings["truth_sam"] = \
+            os.path.join(self.module_settings["outdir"], "truth.sam")
+
+        # xform path
+        xform_script_path = os.path.join(this_dir_path, "alt_contig", "xform_pirs_read_info.pl")
+
+        # get settings from previous runs
+        for key in ["contig", "contig-1", "contig-2", "alt-sam", "read_info",
+                    "contigs_combo_type", "contig-1-from", "contig-1-to", "contig-2-from",
+                    "contig-2-to"]:
             if key in self.db_api.outputs_dict:
                 self.module_settings[key] = self.db_api.outputs_dict[key]
 
-    def run(self):
-        self.module_settings["truth_sam"] = \
-            os.path.join(self.module_settings["outdir"], "truth.sam")
-        self.update_run_settings()
+        bcf_modified_name = {}
+        for i in ["1", "2"]:
+            _contig_name = self.module_settings["contig-{}".format(i)],
+            _from = self.module_settings["contig-{}-from".format(i)],
+            _to = self.module_settings["contig-{}-to".format(i)]
 
-        # test for homozygous alts
-        if self.module_settings["alt-contig-1"] == self.module_settings["alt-contig-2"]:
-            script_path = os.path.join(this_dir_path, "alt_contig", "xform_pirs_read_info.pl")
-            self.module_settings["xform_pirs_read_info"] = script_path
-            cmd = "{xform_pirs_read_info} <(zcat {read_info}) {alt-sam} > {truth_sam}".format(**self.module_settings)
-        else:
-            raise PipelineExc("Use case not supported")
+            bcf_modified_name[_contig_name] = "{}:{}-{}".format(_contig_name, _from, _to)
+
+        options = {
+            "xform": xform_script_path,
+            "read_info": self.module_settings["read_info"],
+            "alt-sam": self.module_settings["alt-sam"],
+            "bcf-contig-1": bcf_modified_name["contig-1"],
+            "bcf-contig-2": bcf_modified_name["contig-2"],
+            "orig-contig-1": self.module_settings["contig-1"],
+            "orig-contig-2": self.module_settings["contig-2"],
+            "truth_sam": self.module_settings["truth_sam"]
+        }
+
+        cmd = "{xform} --read-info <(zcat {read_info}) --alt-sam {alt-sam}"
+        cmd += " --contig1 {bcf-contig-1} --contig1-rename {orig-contig-1} --contig1-offset {contig-1-from}"
+        cmd += " --contig2 {bcf-contig-2} --contig2-rename {orig-contig-2} --contig2-offset {contig-2-from}"
+        cmd += " > {truth_sam}"
+
+        cmd = cmd.format(**options)
 
         try:
             res = subprocess.check_output(cmd, shell=True, executable='/bin/bash')
             logging.info("Response: {}".format(res))
-            logging.info("Truth sam created: {}".
-                         format(self.module_settings["truth_sam"]))
+            logging.info("Truth sam created: {}".format(self.module_settings["truth_sam"]))
             self.db_api.upload_to_db('sam_gold', self.module_settings["truth_sam"])
         except Exception as e:
-            logging.error('Error message %s' % e)
-            raise
+            raise PipelineExc('Failed to create gold Sam. Error message: %s' % e)
 
 
 ###########################################################

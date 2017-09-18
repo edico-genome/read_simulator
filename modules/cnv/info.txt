@@ -1,0 +1,16 @@
+
+Hi Theo,
+ 
+R script is in:      /sw/trunk/test/bin/structural_vars/simulation/RSVSim_Exomemult_samples_2ref_par.R
+capsim bash script:  /sw/trunk/test/bin/structural_vars/simulation/run_capsim.sh
+ 
+In my sim environment they’re both in
+
+/staging/gavinp/struct_vars/CNV/simul/RSVSim/exome
+ 
+Capsim is from https://github.com/mdcao/capsim, there are installation instructions there or the bash script above points to an installation that is in my home directory.
+My capsim script uses gnu parallel for parallelization – also I think I needed a newer version of samtools for capsim.
+ 
+I’ll check the probe files into perforce next.
+ 
+Gavin.
