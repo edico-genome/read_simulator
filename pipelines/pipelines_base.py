@@ -1,3 +1,4 @@
+import os
 from abc import ABCMeta, abstractproperty
 from lib.db_api import DBAPI
 from lib.common import PipelineExc
@@ -46,6 +47,9 @@ class PipelinesBase(object):
             self.module_instances.append(inst)
 
     def run(self):
+        fh = logging.FileHandler(os.path.join(self.pipeline_settings['outdir'],
+                                              self.pipeline_settings['pipeline_name']))
+        logger.addHandler(fh)
         logger.info("\nPIPELINE: {}".format(self.name))
         for inst in self.module_instances:
             try:
@@ -54,9 +58,10 @@ class PipelinesBase(object):
                 inst.after_run()
                 self.exit_status = "COMPLETED"
             except PipelineExc as e:
-                logger.error("Pipeline Failed: {}; reason: {}.\n\nContinue with next pipeline ..."
-                             .format(self.name, e))
+                msg = "Pipeline Failed: {}; reason: {}.\n\nContinue with next pipeline ..."
+                msg = msg.format(self.name, e)
+                PipelineExc(msg)
                 return
             except Exception as e:
-                logger.error("Fatal error: {}".format(e), exc_info=True)
-                sys.exit(1)
+                PipelineExc("Fatal error: {}".format(e), exc_info=True)
+        logger.removeHandler(fh)
