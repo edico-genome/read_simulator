@@ -23,17 +23,16 @@ def pipeline_factory(pipeline_name):
     """
     use pipeline settings ( pipeline name ) to determine which pipeline to instantiate
     """
-    ThisPipelineClass = None
     ThisPipelineClass = getattr(pipelines, pipeline_name)
 
     if not ThisPipelineClass:
-        logger.error("Please ensure pipeline: {} is registered".format(
-            pipeline_settings['pipeline_name']))
+        logger.error("Please ensure pipeline: {} is registered"
+                     .format(pipeline_name))
         sys.exit(1)
 
     assert issubclass(ThisPipelineClass, pipelines.PipelinesBase),\
         "Please ensure pipeline: {} is a valid subclass of type pipeline: {}"\
-        .format(pipeline_settings["pipeline_name"])
+        .format(pipeline_name)
 
     return ThisPipelineClass
 
