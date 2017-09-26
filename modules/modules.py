@@ -27,6 +27,16 @@ def check_output(cmd):
 
 
 ###########################################################
+class CNVExomeModFastas(ModuleBase):
+    default_settings = {}
+    expected_settings = ["n_reads", "read_length", "fragment_size"]
+
+    def run(self):
+        print("running running running ...")
+
+
+
+###########################################################
 class VLRDVCF(ModuleBase):
     default_settings = {}
     expected_settings = ["varrate"]

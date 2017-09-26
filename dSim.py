@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
-import venv_check
-import sys
+import sys, copy
 import argparse
 from lib import sim_logger
 from lib.settings import Settings
@@ -17,12 +16,12 @@ def is_venv():
         (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)))
 
 
-def pipeline_factory(pipeline_settings):
+def pipeline_factory(pipeline_name):
     """
     use pipeline settings ( pipeline name ) to determine which pipeline to instantiate
     """
     ThisPipelineClass = None
-    ThisPipelineClass = getattr(pipelines, pipeline_settings["pipeline_name"])
+    ThisPipelineClass = getattr(pipelines, pipeline_name)
 
     if not ThisPipelineClass:
         logger.error("Please ensure pipeline: {} is registered".format(
@@ -46,9 +45,14 @@ def instantiate_pipelines():
         if pipeline_settings.get("on/off", "on") in [0, None, "off"]:
             continue
         else:
-            Pipeline = pipeline_factory(pipeline_settings)
-            p = Pipeline(pipeline_settings)
-            pipelines.append(p)
+            num_runs = pipeline_settings.get("num_runs", "1")
+            for idx in range(num_runs):
+                this_pipeline_settings = copy.deepcopy(pipeline_settings)
+                if idx > 0:
+                    this_pipeline_settings["dataset_name"] += "_{}".format(idx)
+                Pipeline = pipeline_factory(this_pipeline_settings["pipeline_name"])
+                p = Pipeline(this_pipeline_settings)
+                pipelines.append(p)
     return pipelines
 
 

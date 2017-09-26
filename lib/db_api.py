@@ -83,8 +83,8 @@ class DBAPI(object):
             'value': value
             }
 
-        logger.info("Uploading to db, Url: {}".format(url))
-        logger.info(pprint(data))
+        logger.debug("Uploading to db, Url: {}".format(url))
+        # logger.debug(pprint(data))
         res = requests.post(url, params=data)
         res.raise_for_status()
 
@@ -103,7 +103,6 @@ class DBAPI(object):
         url = "http://data.edicogenome.com/api/get"
 
         _filter = {'name': dataset_name, 'get_x': 'ref_type'}
-
         r = requests.get(url, params=_filter)
         r.raise_for_status()
         r = r.text
