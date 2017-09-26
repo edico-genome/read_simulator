@@ -41,21 +41,21 @@ def instantiate_pipelines():
     """
     instantiate pipelines and validate pipeline settings
     """
-    pipelines = []
+    _pipelines = []
     logger.info("\nVALIDATING PIPELINES\n")
     for pipeline_settings in settings.runs:
         if pipeline_settings.get("on/off", "on") in [0, None, "off"]:
             continue
         else:
-            num_runs = pipeline_settings.get("num_runs", "1")
+            num_runs = pipeline_settings.get("num_runs", 1)
             for idx in range(num_runs):
                 this_pipeline_settings = copy.deepcopy(pipeline_settings)
                 if idx > 0:
                     this_pipeline_settings["dataset_name"] += "_{}".format(idx)
                 Pipeline = pipeline_factory(this_pipeline_settings["pipeline_name"])
                 p = Pipeline(this_pipeline_settings)
-                pipelines.append(p)
-    return pipelines
+                _pipelines.append(p)
+    return _pipelines
 
 
 def run_pipelines(pipelines):
@@ -74,8 +74,8 @@ def run_pipelines(pipelines):
 ############################################################
 # main
 def main():
-    pipelines = instantiate_pipelines()
-    run_pipelines(pipelines)
+    pipelines_to_run = instantiate_pipelines()
+    run_pipelines(pipelines_to_run)
 
 
 ############################################################

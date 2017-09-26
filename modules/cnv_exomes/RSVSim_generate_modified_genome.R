@@ -1,47 +1,81 @@
+#!/usr/bin/env Rscript
 
-# github.com/fritzsedlazeck/SURVIVOR
-library(RSVSim)
-if(packageVersion("RSVSim") < "1.17.0") {
-    stop("Need RSVSim 1.17.0")
-}
+library(RSVSim)  # github.com/fritzsedlazeck/SURVIVOR
 library(GenomicRanges)
 library(rtracklayer)
 library(doParallel)
 library(foreach)
+library(optparse)
+
+if(packageVersion("RSVSim") < "1.17.0") {
+    stop("Need RSVSim 1.17.0")
+}
+
+
+##################################################
+# setup 
 data(weightsMechanisms, package="RSVSim")
 data(weightsRepeats, package="RSVSim")
 
-# -- start parameters -- 
+
+##################################################
+# cmd args
+option_list = list(
+  make_option(c("--nHomozygousDeletions"), action="store", default=10, help=""),
+  make_option(c("--nHeterozygousDeletions"), action="store", default=10, help=""),
+  make_option(c("--nTandemDuplications"), action="store", default=20, help=""),
+  make_option(c("--maxEventLength"), action="store", default=40000, help=""),
+  make_option(c("--minEventLength"), action="store", default=1000, help=""),
+  make_option(c("--outdir"), action="store", default=1000, help="output dir should already exist"),
+  make_option(c("--fa_file"), action="store", default=1000, help="original unmodified reference fasta"),
+  make_option(c("--cnv_db"), action="store", default="", help="regions where CNV occur (bed file format)"),
+  make_option(c("--target_chrs"), action="store", default="", help="optional chr to narrow the simulation, by default the whole genome will be used"),
+  make_option(c("--target_bed"), action="store", default="", help="Bed where VC will evaluate")
+)
+  
+opt = parse_args(OptionParser(option_list=option_list))
+
 # specify count for each event
-nHomozygousDeletions <- 10
-nHeterozygousDeletions <- 10
-nTandemDuplications <- 20
+nHomozygousDeletions = opt$nHomozygousDeletions
+nHeterozygousDeletions = opt$nHeterozygousDeletions 
+nTandemDuplications = opt$nTandemDuplications
 
 # limit CNV event length range
-maxEventLength = 40000
-minEventLength = 1000
+minEventLength = opt$minEventLength
+maxEventLength = opt$maxEventLength
 
 # output directory, should already exist
-outdir <- paste("/staging/gavinp/struct_vars/CNV/simul/RSVSim/exome/for_theo/samp1")
-# reference fasta
-fa_file <- "/mnt/archive/gavinp/1000_genomes/hs37d5.mod.fa"
-# cnv database from tgv
-cnv_db = import("/home/gavinp/Downloads/GRCh37_hg19_variants_2016-05-15.allCNVs_in_20120518_targets.bed", format="bed")
+outdir = opt$outdir
 
-target_chrs <- list() #c("20")   # if non-zero, this specifies a single chromosome to be simulated
+# reference fasta
+# fa_file <- "/mnt/archive/gavinp/1000_genomes/hs37d5.mod.fa"
+fa_file = db$fa_file
+
+# cnv database from tgv # "/home/gavinp/Downloads/GRCh37_hg19_variants_2016-05-15.allCNVs_in_20120518_targets.bed"
+cnv_db = import(opt$cnv_db, format="bed") 
+
+# if non-zero, this specifies a single chromosome to be simulated 
 # use target_chrs = list() to set an empty list, which will simulate the entire genome
+if ( opt$target_chrs == "" ){
+  target_chrs <- list()
+} else {
+  target_chrs <- list(opt$target_chrs)
+}
 
 # filter on contig if required
 if (length(target_chrs)>0){
-    cnv_db = cnv_db[ seqnames(cnv_db) == target_chrs ]    # filter cnvs for desired chromosomes
+    # filter cnvs for desired chromosomes
+    cnv_db = cnv_db[seqnames(cnv_db) == target_chrs]
 }
-# set CNV caller target bed file
-target_cnv_db <- read.table("/mnt/archive/gavinp/1000_genomes/20120518.consensus_add50bp.chrom.bed")
 
-# ---- end of parameters ----
+# set CNV caller target bed file - "/mnt/archive/gavinp/1000_genomes/20120518.consensus_add50bp.chrom.bed"
+target_cnv_db <- read.table(opt$target_bed)
 
+
+##################################################
 # define function removeOverlappingRegions(regions)
-# this function repeatedly removes the region that overlaps the most other regions in the structure
+# this function repeatedly removes the region that overlaps 
+# the most other regions in the structure
 # until there are no overlaps
 removeOverlappingRegions <- function(regions){
     my_regions = regions
@@ -61,6 +95,9 @@ removeOverlappingRegions <- function(regions){
     return(my_regions)
 }
 
+
+##################################################
+# MAIN
 colnames(target_cnv_db) <- c('chr', 'start', 'end')
 exons <- with(target_cnv_db, GRanges(chr, IRanges(start+1, end)))
 

@@ -2,7 +2,6 @@
   {
     "description": "CNV Exomes",
     "on/off": 1,
-    "num_runs": 2,
     "pipeline_name": "CNVExomes",
     "dataset_name": "cnv_exome",
     "reference": "hg19",
