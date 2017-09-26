@@ -20,8 +20,9 @@ class ModuleBase(object):
     __metaclass__ = ABCMeta
 
     def __init__(self, pipeline_settings, db_api):
+        self.logger = logger
         self.name = self.__class__.__name__
-        logger.info("- validating module: {}".format(self.name))
+        self.logger.info("- validating module: {}".format(self.name))
         self.pipeline_settings = pipeline_settings
         self.dataset_name = None
         self.module_settings = None
@@ -69,24 +70,24 @@ class ModuleBase(object):
             self.outdir, self.pipeline_settings['dataset_name'], self.name)
         if not os.path.isdir(self.module_settings['outdir']):
             try:
-                logger.info("create module outdir: {}".format(self.module_settings['outdir']))
+                self.logger.info("create module outdir: {}".format(self.module_settings['outdir']))
                 os.makedirs(self.module_settings['outdir'])
             except Exception as e:
-                logger.error("Failed to create directory: {}, exception: {}".
+                self.logger.error("Failed to create directory: {}, exception: {}".
                              format(self.module_settings['outdir'], e))
                 sys.exit(1)
 
         self.validate_module_settings()
 
     def print_module_settings(self):
-        logger.info(self.module_settings)
+        self.logger.info(self.module_settings)
 
     def before_run(self):
-        logger.info("")
-        logger.info("- module: {}".format(self.name))
+        self.logger.info("")
+        self.logger.info("- module: {}".format(self.name))
 
     def after_run(self):
-        logger.info("- done: {}".format(self.name))
+        self.logger.info("- done: {}".format(self.name))
 
     def add_module_settings_to_saved_outputs_dict(self):
         for key in self.module_settings:
@@ -116,5 +117,5 @@ class ModuleBase(object):
     @staticmethod
     def fail(msg, mod):
         msg = "Invalid settings for module: {}, {}".format(mod, msg)
-        logger.error(msg)
+        self.logger.error(msg)
         sys.exit(1)

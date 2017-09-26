@@ -13,17 +13,10 @@ from lib.common import PipelineExc
 from enum import Enum
 
 
-logger = logging.getLogger(__name__)
 this_dir_path = os.path.dirname(os.path.realpath(__file__))
 
 
 ###########################################################
-def check_output(cmd):
-    """ helper function to run cmd """
-    logger.debug("Run cmd: {}".format(cmd))
-    res = subprocess.check_output(cmd, shell=True)
-    logger.debug("Response: {}".format(res))
-    return res
 
 
 ###########################################################
@@ -36,14 +29,14 @@ class VLRDVCF(ModuleBase):
         self.get_target_bed()
         for key in ["ref_type", "fasta_file", "dict_file"]:
             if not self.module_settings[key]:
-                logger.info("{}, dataset {} missing: {}".format(
+                self.logger.info("{}, dataset {} missing: {}".format(
                     self.name, self.dataset_name, key))
                 sys.exit(1)
 
     def run(self):
         self.get_refs()
         res = vlrd_functions.create_truth_vcf_and_fastas(self.module_settings)
-        logger.info(res)
+        self.logger.info(res)
         self.db_api.set_fastas(res['fasta0'], res['fasta1'])
         self.db_api.post_truth_vcf(res['truth_vcf'])
 
@@ -58,6 +51,13 @@ class ContigComboType(Enum):
 class AltContigVCF(ModuleBase):
     default_settings = {}
     expected_settings = ["contig-1", "contig-2", "alt-sam"]
+
+    def check_output(self, cmd):
+        """ helper function to run cmd """
+        self.logger.info("Run cmd: {}".format(cmd))
+        res = subprocess.check_output(cmd, shell=True)
+        self.logger.info("Response: {}".format(res))
+        return res
 
     def identify_contig_types_and_use_case(self):
         """
@@ -101,7 +101,7 @@ class AltContigVCF(ModuleBase):
     def get_contig_length_from_dict_file(self, contig_key):
         """ lookup alt contig length in dict """
         assert contig_key in ["contig-1", "contig-2"]
-        logger.info("Get contig {} ranges".format(contig_key))
+        self.logger.info("Get contig {} ranges from dict file".format(contig_key))
 
         with open(self.module_settings["dict_file"], 'r') as stream:
 
@@ -120,10 +120,10 @@ class AltContigVCF(ModuleBase):
                         try:
                             c_len = int(len_col.replace("LN:", ""))
                             self.module_settings[c_idx_to] = c_len
-                            logger.debug("{}: {}".format(c_idx, c_len))
+                            self.logger.debug("{}: {}".format(c_idx, c_len))
                         except Exception as e:
-                            logger.error("Contig len not found in line: {}".format(line))
-                            logger.error(e)
+                            self.logger.error("Contig len not found in line: {}".format(line))
+                            self.logger.error(e)
 
         for i in [c_idx_from, c_idx_to]:
             assert isinstance(self.module_settings[i], int), \
@@ -138,7 +138,7 @@ class AltContigVCF(ModuleBase):
         self.get_contig_length_from_dict_file("contig-1")
 
         # get primary contig start stop indexes
-        logger.info("find primary contig start stop indexes")
+        self.logger.info("Find primary contig start stop indexes")
         _alt_to_pri_script = os.path.join(this_dir_path, "alt_contig", "convert_alt_to_pri_coords.pl")
         cmd = "{} {} {} 1 {} 2> /dev/null".format(
             _alt_to_pri_script,
@@ -147,7 +147,7 @@ class AltContigVCF(ModuleBase):
             self.module_settings["contig-1-to"])
 
         cmd = cmd.format(**self.module_settings)
-        res = check_output(cmd)
+        res = self.check_output(cmd)
 
         try:
             _from, _to = res.split()[1:3]
@@ -159,7 +159,7 @@ class AltContigVCF(ModuleBase):
         # import pdb; pdb.set_trace()
 
         # get contig 2 start stop indexes ( context specific )
-        logger.info("find indexes in alt-contig 2 that corresponds to subrange in primary ")
+        self.logger.info("find indexes in alt-contig 2 that corresponds to subrange in primary ")
         if self.module_settings["contigs_combo_type"] == ContigComboType.alt_prim:
             self.module_settings["contig-2-from"] = self.module_settings["contig-primary-from"]
             self.module_settings["contig-2-to"] = self.module_settings["contig-primary-to"]
@@ -175,7 +175,7 @@ class AltContigVCF(ModuleBase):
                 self.module_settings["contig-2"],
                 self.module_settings["contig-primary-from"],
                 self.module_settings["contig-primary-to"])
-            res = check_output(cmd)
+            res = self.check_output(cmd)
             try:
                 _from, _to = res.split()[4:6]
                 self.module_settings["contig-2-from"] = _from
@@ -188,7 +188,7 @@ class AltContigVCF(ModuleBase):
 
         def check_call():
             try:
-                logger.info(cmd)
+                self.logger.info(cmd)
                 subprocess.check_call(cmd, shell=True)
             except Exception as e:
                 raise PipelineExc(e)
@@ -214,7 +214,7 @@ class AltContigVCF(ModuleBase):
             "{contig-2}:{contig-2-from}-{contig-2-to} > {truth_vcf}"
         cmd = cmd.format(**self.module_settings)
         try: 
-            check_output(cmd)
+            self.check_output(cmd)
         except Exception as e:
             raise PipelineExc("Failed to create truth VCF: {}".format(e))
         self.db_api.post_truth_vcf(self.module_settings["truth_vcf"])
@@ -243,12 +243,12 @@ class Pirs(ModuleBase):
             for fa in ['fasta0', 'fasta1']:
                 self.module_settings[fa] = rv[fa]
         except Exception as e:
-            logger.error('Pirs is missing a required modified Fasta')
-            logger.error("Exception: {}".format(e))
+            self.logger.error('Pirs is missing a required modified Fasta')
+            self.logger.error("Exception: {}".format(e))
             sys.exit(1)
 
         # run
-        logger.info('Pirs: simulating reads ...')
+        self.logger.info('Pirs: simulating reads ...')
         log = os.path.join(self.module_settings['outdir'], "pirs.log")
         self.module_settings['pirs_log'] = log
 
@@ -263,14 +263,14 @@ class Pirs(ModuleBase):
 
         cmd = cmd.format(**self.module_settings)
 
-        logger.info("Pirs cmd: {}".format(cmd))
+        self.logger.info("Pirs cmd: {}".format(cmd))
         try:
             subprocess.check_output(cmd, shell=True)
         except Exception() as e:
-            logging.error('Error message %s' % e)
+            self.logger.error('Error message %s' % e)
             raise
 
-        logger.info('find the pirs generated FQs and upload to DB')
+        self.logger.info('find the pirs generated FQs and upload to DB')
         fq_lists = []
         for i in ["1", "2"]:
             p = os.path.join(self.module_settings["outdir"], 'pirs*' + i + '.fq.gz')
@@ -307,11 +307,11 @@ class AltContigPirsTruthSam(ModuleBase):
 
         bcf_modified_name = {}
         for i in ["1", "2"]:
-            _contig_name = self.module_settings["contig-{}".format(i)],
-            _from = self.module_settings["contig-{}-from".format(i)],
+            _contig = "contig-{}".format(i)
+            _contig_name = self.module_settings["contig-{}".format(i)]
+            _from = self.module_settings["contig-{}-from".format(i)]
             _to = self.module_settings["contig-{}-to".format(i)]
-
-            bcf_modified_name[_contig_name] = "{}:{}-{}".format(_contig_name, _from, _to)
+            bcf_modified_name[_contig] = "{}:{}-{}".format(_contig_name, _from, _to)
 
         options = {
             "xform": xform_script_path,
@@ -321,6 +321,8 @@ class AltContigPirsTruthSam(ModuleBase):
             "bcf-contig-2": bcf_modified_name["contig-2"],
             "orig-contig-1": self.module_settings["contig-1"],
             "orig-contig-2": self.module_settings["contig-2"],
+            "contig-1-from": self.module_settings["contig-1-from"],
+            "contig-2-from": self.module_settings["contig-2-from"],
             "truth_sam": self.module_settings["truth_sam"]
         }
 
@@ -332,9 +334,10 @@ class AltContigPirsTruthSam(ModuleBase):
         cmd = cmd.format(**options)
 
         try:
+            self.logger.info("Truth SAM cmd: {}".format(cmd))
             res = subprocess.check_output(cmd, shell=True, executable='/bin/bash')
-            logging.info("Response: {}".format(res))
-            logging.info("Truth sam created: {}".format(self.module_settings["truth_sam"]))
+            self.logger.info("Response: {}".format(res))
+            self.logger.info("Truth sam created: {}".format(self.module_settings["truth_sam"]))
             self.db_api.upload_to_db('sam_gold', self.module_settings["truth_sam"])
         except Exception as e:
             raise PipelineExc('Failed to create gold Sam. Error message: %s' % e)

@@ -1,7 +1,7 @@
 from abc import ABCMeta, abstractproperty
 from lib.db_api import DBAPI
 from lib.common import PipelineExc
-import logging, sys
+import logging, sys, os
 
 logger = logging.getLogger(__name__)
 
@@ -45,18 +45,31 @@ class PipelinesBase(object):
             inst = C(self.pipeline_settings, self.db_api)
             self.module_instances.append(inst)
 
+
     def run(self):
+        fh = logging.FileHandler(
+            os.path.join(
+                self.pipeline_settings['outdir'],
+                self.pipeline_settings['dataset_name'],
+                self.pipeline_settings['pipeline_name']+'.log'))
+
+        logger.addHandler(fh)
         logger.info("\nPIPELINE: {}".format(self.name))
         for inst in self.module_instances:
             try:
+                inst.logger.addHandler(fh)
                 inst.before_run()
                 inst.run()
                 inst.after_run()
                 self.exit_status = "COMPLETED"
             except PipelineExc as e:
-                logger.error("Pipeline Failed: {}; reason: {}.\n\nContinue with next pipeline ..."
-                             .format(self.name, e))
+                msg = "Pipeline Failed: {}; reason: {}.\n\nContinue with next pipeline ..."
+                msg = msg.format(self.name, e)
+                PipelineExc(msg)
                 return
             except Exception as e:
-                logger.error("Fatal error: {}".format(e), exc_info=True)
-                sys.exit(1)
+                logger.error(e, exc_info=True)
+                PipelineExc("Pipeline Failed: {}".format(self.name))
+            finally:
+                inst.logger.removeHandler(fh)
+        logger.removeHandler(fh)

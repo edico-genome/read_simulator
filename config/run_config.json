@@ -1,7 +1,7 @@
 [
   {
     "_description": "Example AltContig with homozygous alt contigs",
-    "on/off": 1,
+    "on/off": 0,
     "pipeline_name": "AltContig",
     "dataset_name": "alt_contig_chr6_homozygous_GL000250v2",
     "reference": "hg38",
@@ -33,7 +33,7 @@
 ,
   {
     "_description": "Example AltContig with heterozygous contigs (one is alt, other is primary)",
-    "on/off": 1,
+    "on/off": 0,
     "pipeline_name": "AltContig",
     "dataset_name": "alt_contig_chr6_heterzygous_GL000250v2_primary",
     "reference": "hg38",
