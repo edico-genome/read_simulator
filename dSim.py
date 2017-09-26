@@ -10,10 +10,13 @@ from pipelines import pipelines
 logger = sim_logger.logging.getLogger(__name__)
 
 
-def is_venv():
-    """ confirm we are running in a virtualenv """
-    return ((hasattr(sys, 'real_prefix') or
-        (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)))
+def ensure_running_in_venv():
+    """ confirm that we are running in a virtualenv """
+    test1 = hasattr(sys, 'real_prefix')
+    test2 = hasattr(sys, 'base_prefix') and (sys.base_prefix != sys.prefix)
+    if not (test1 or test2):
+        print "Please run in appropriate Python2.7 venv"
+        sys.exit(1)
 
 
 def pipeline_factory(pipeline_name):
@@ -80,10 +83,7 @@ def main():
 if __name__ == '__main__':
     """
     """
-    if not is_venv():
-        print "Please run in appropriate Python2.7 venv"
-        sys.exit(1)
-
+    ensure_running_in_venv()
     parser = argparse.ArgumentParser()
     parser.add_argument('-r', '--run_settings', action='store', required=True)
     args = parser.parse_args()
