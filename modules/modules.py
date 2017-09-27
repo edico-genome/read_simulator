@@ -42,7 +42,7 @@ class CNVExomeModFastas(ModuleBase):
             this_dir_path, "cnv_exomes",
             "RSVSim_generate_modified_genome.R")
 
-        cmd="./" + _mod_fastas_script
+        cmd=_mod_fastas_script
         cmd+=" --nHomozygousDeletions {nHomozygousDeletions}"
         cmd+=" --nHeterozygousDeletions {nHeterozygousDeletions}"
         cmd+=" --nTandemDuplications {nTandemDuplications}"

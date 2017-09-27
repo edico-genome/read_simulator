@@ -13,7 +13,7 @@
 	    "nTandemDuplications": 20,
 	    "maxEventLength": 40000,
 	    "minEventLength": 1000,
-	    "outdir": "/staging/tmp"
+	    "outdir": "/staging/tmp",
 	    "fa_file": "/mnt/archive/gavinp/1000_genomes/hs37d5.mod.fa",
 	    "cnv_db": "/home/gavinp/Downloads/GRCh37_hg19_variants_2016-05-15.allCNVs_in_20120518_targets.bed",
 	    "target_chrs": "20",
