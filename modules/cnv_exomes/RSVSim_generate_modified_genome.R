@@ -7,6 +7,8 @@ library(doParallel)
 library(foreach)
 library(optparse)
 
+print(packageVersion("RSVSim"))
+
 if(packageVersion("RSVSim") < "1.17.0") {
     stop("Need RSVSim 1.17.0")
 }
@@ -21,56 +23,76 @@ data(weightsRepeats, package="RSVSim")
 ##################################################
 # cmd args
 option_list = list(
-  make_option(c("--nHomozygousDeletions"), action="store", default=10, help=""),
-  make_option(c("--nHeterozygousDeletions"), action="store", default=10, help=""),
-  make_option(c("--nTandemDuplications"), action="store", default=20, help=""),
-  make_option(c("--maxEventLength"), action="store", default=40000, help=""),
-  make_option(c("--minEventLength"), action="store", default=1000, help=""),
-  make_option(c("--outdir"), action="store", default=1000, help="output dir should already exist"),
-  make_option(c("--fa_file"), action="store", default=1000, help="original unmodified reference fasta"),
-  make_option(c("--cnv_db"), action="store", default="", help="regions where CNV occur (bed file format)"),
-  make_option(c("--target_chrs"), action="store", default="", help="optional chr to narrow the simulation, by default the whole genome will be used"),
-  make_option(c("--target_bed"), action="store", default="", help="Bed where VC will evaluate")
+  make_option(c("--nHomozygousDeletions"), action="store", default="NULL", help=""),
+  make_option(c("--nHeterozygousDeletions"), action="store", help="", default="NULL"),
+  make_option(c("--nTandemDuplications"), action="store", help="", default="NULL"),
+  make_option(c("--maxEventLength"), action="store", help="", default="NULL"),
+  make_option(c("--minEventLength"), action="store", help="", default="NULL"),
+  make_option(c("--outdir"), action="store", help="output dir should already exist", 
+  			     default="NULL"),
+  make_option(c("--fa_file"), action="store",
+  			      help="original unmodified reference fasta",
+			      default="NULL"),
+  make_option(c("--cnv_db"), action="store", 
+  			     help="regions where CNV occur (bed file format)",
+			     default="NULL"),
+  make_option(c("--target_chrs"),
+		action="store",
+		help="optional chr to narrow the simulation",
+		default="NULL"),
+  make_option(c("--target_bed"), action="store", help="Bed where VC will evaluate",
+  				 default="NULL")
 )
+
+required_args = c("nHomozygousDeletions", "nHeterozygousDeletions",
+	          "nTandemDuplications", "maxEventLength",
+	          "minEventLength", "outdir", "fa_file",
+                  "cnv_db", "target_bed")
   
 opt = parse_args(OptionParser(option_list=option_list))
 
+# check opts are defined
+for (n in required_args){
+  if ( opt[n] == "NULL" ) {
+    msg = paste("parameter:", n, "must be provided. See script usage (--help)")
+    stop(msg)
+  }
+}
+
+print("Parse options")
+
 # specify count for each event
-nHomozygousDeletions = opt$nHomozygousDeletions
-nHeterozygousDeletions = opt$nHeterozygousDeletions 
-nTandemDuplications = opt$nTandemDuplications
+nHomozygousDeletions = as.numeric(opt$nHomozygousDeletions)
+nHeterozygousDeletions = as.numeric(opt$nHeterozygousDeletions)
+nTandemDuplications = as.numeric(opt$nTandemDuplications)
 
 # limit CNV event length range
-minEventLength = opt$minEventLength
-maxEventLength = opt$maxEventLength
+minEventLength = as.numeric(opt$minEventLength)
+maxEventLength = as.numeric(opt$maxEventLength)
 
 # output directory, should already exist
 outdir = opt$outdir
 
 # reference fasta
 # fa_file <- "/mnt/archive/gavinp/1000_genomes/hs37d5.mod.fa"
-fa_file = db$fa_file
+fa_file = opt$fa_file
+
 
 # cnv database from tgv # "/home/gavinp/Downloads/GRCh37_hg19_variants_2016-05-15.allCNVs_in_20120518_targets.bed"
+
 cnv_db = import(opt$cnv_db, format="bed") 
 
 # if non-zero, this specifies a single chromosome to be simulated 
-# use target_chrs = list() to set an empty list, which will simulate the entire genome
-if ( opt$target_chrs == "" ){
-  target_chrs <- list()
-} else {
-  target_chrs <- list(opt$target_chrs)
-}
-
 # filter on contig if required
-if (length(target_chrs)>0){
-    # filter cnvs for desired chromosomes
-    cnv_db = cnv_db[seqnames(cnv_db) == target_chrs]
+if ( opt$target_chrs != "NULL"){
+    cnv_db = cnv_db[seqnames(cnv_db) == opt$target_chrs]
 }
 
-# set CNV caller target bed file - "/mnt/archive/gavinp/1000_genomes/20120518.consensus_add50bp.chrom.bed"
+# set CNV caller target bed file 
+# e.g. "/mnt/archive/gavinp/1000_genomes/20120518.consensus_add50bp.chrom.bed"
 target_cnv_db <- read.table(opt$target_bed)
 
+print("Parse options complete")
 
 ##################################################
 # define function removeOverlappingRegions(regions)
@@ -91,28 +113,35 @@ removeOverlappingRegions <- function(regions){
         maxVal = max(c)
         removed <- removed+1
     }
-    cat("Removed ", removed, " overlapping regions, ", length(my_regions), "remaining regions \n")
+    msg = paste("Removed", removed, "overlapping regions",
+    	  	length(my_regions), "remaining regions") 
+    print(msg)
     return(my_regions)
 }
 
 
 ##################################################
 # MAIN
+
 colnames(target_cnv_db) <- c('chr', 'start', 'end')
 exons <- with(target_cnv_db, GRanges(chr, IRanges(start+1, end)))
 
 cnv_db = cnv_db[width(ranges(cnv_db))<maxEventLength]
 cnv_db = cnv_db[width(ranges(cnv_db))>minEventLength]
-cnv_db = cnv_db[countOverlaps(cnv_db, exons) > 1] # get cnvs that overlap at least one target region
+
+# get cnvs that overlap at least one target region
+cnv_db = cnv_db[countOverlaps(cnv_db, exons) > 1] 
 initial_cnv_db = cnv_db
 
-# remove overlapping ranges[so all the checks for overlaps further below should be redundant]
+print("Remove overlapping regions")
+# [so all the checks for overlaps further below should be redundant]
 cnv_db = removeOverlappingRegions(cnv_db)
 foundOverlaps = TRUE
 if (length(cnv_db)<(nHomozygousDeletions+nHeterozygousDeletions+nTandemDuplications)){
     stop("Non-overlapping CNV events with length < maxEventLength are too few to support specified number of deletions/duplications ")
 }
-# ensure homozygous deletions do not overlap
+
+print("Ensure homozygous deletions do not overlap")
 while(foundOverlaps){
     cat("Generating homozygous Deletions\n")
     homo_indices = sample(length(cnv_db), size=nHomozygousDeletions, replace=FALSE)
@@ -124,14 +153,17 @@ while(foundOverlaps){
 foundOverlaps = TRUE
 while(foundOverlaps){
     cat("Generating heterozygous Deletions\n")
-    hetero_indices = sample(length(cnv_db), size=nHeterozygousDeletions, replace=FALSE)
+    hetero_indices = sample(length(cnv_db), size=nHeterozygousDeletions,
+    		            replace=FALSE)
     heteroDels = sort(cnv_db[hetero_indices,])
     cnv_db = cnv_db[-hetero_indices,]
-    foundOverlaps=(sum(countOverlaps(homoDels, heteroDels)>0) || length(findOverlaps(heteroDels, ignoreSelf=TRUE))>0)
+    foundOverlaps=(sum(countOverlaps(homoDels, heteroDels)>0) ||
+    		   length(findOverlaps(heteroDels, ignoreSelf=TRUE))>0)
     cat("Found overlaps", foundOverlaps,"\n")
 }
 
-# assign the heterozygous deletions randomly, equally split to each reference
+###
+print("Assign the heterozygous deletions randomly, equally split to each reference")
 heteroDels1_indices = sample(length(heteroDels), size=floor(nHeterozygousDeletions/2), replace=FALSE)
 heteroDels1 = heteroDels[heteroDels1_indices]
 heteroDels2 = heteroDels[-heteroDels1_indices]
@@ -147,9 +179,12 @@ while(foundOverlaps){
 }
 
 dups_sizes = width(ranges(dups))
-# generate TWO reference genomes so that we can simulate heterozygous deletions
+
+###
+print("Generate 2 modified fastas for heterozygous deletions")
 for (p in 1:2){
-    if (p==1){
+    if (p==1)
+    {
         gRangeDels <- c(homoDels, heteroDels1)
         gRangeDels <- sort(gRangeDels)
     } else {
@@ -158,11 +193,22 @@ for (p in 1:2){
     }
     names(gRangeDels) <- paste('deletion', 1:length(gRangeDels), sep='')
     names(dups) <- paste('tandemDuplication', 1:length(dups), sep='')
-    # note that the tandem duplications are random multiplicities for each reference, so it is likely the resulting copy numbers will not match between the genomes
-    if (length(target_chrs)>0){ # if we have a target chromosome list
-        sim = simulateSV(output=outdir, genome=fa_file, chrs=target_chrs, random=FALSE, dups=length(dups), regionsDels=gRangeDels, maxDups=4, sizeDups=dups_sizes, regionsDups=dups, verbose=TRUE, repeatBias=FALSE, bpSeqSize=50)
+
+    # note that the tandem duplications are random multiplicities for each reference
+    # so it is likely the resulting copy numbers will not match between the genomes
+
+    # if we have a target chromosome list
+    if ( opt$target_chrs != "NULL" )
+    { 
+        sim = simulateSV(output=outdir, genome=fa_file, chrs=opt$target_chrs,
+	      		 random=FALSE, dups=length(dups), regionsDels=gRangeDels,
+			 maxDups=4, sizeDups=dups_sizes, regionsDups=dups,
+			 verbose=TRUE, repeatBias=FALSE, bpSeqSize=50)
     } else {
-        sim = simulateSV(output=outdir, genome=fa_file, random=FALSE, dups=length(dups), regionsDels=gRangeDels, maxDups=4, sizeDups=dups_sizes, regionsDups=dups, verbose=TRUE, repeatBias=FALSE, bpSeqSize=50)
+        sim = simulateSV(output=outdir, genome=fa_file, random=FALSE,
+	      		dups=length(dups), regionsDels=gRangeDels, maxDups=4,
+			sizeDups=dups_sizes, regionsDups=dups, verbose=TRUE,
+			repeatBias=FALSE, bpSeqSize=50)
     }    
     foo <- metadata(sim)
 
@@ -181,4 +227,3 @@ for (p in 1:2){
     sprintf("Renaming genome_rearranged.fasta to ", ref_name)
     file.rename(orig_name, ref_name)
 }
-
