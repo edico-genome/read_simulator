@@ -29,12 +29,51 @@ def check_output(cmd):
 ###########################################################
 class CNVExomeModFastas(ModuleBase):
     default_settings = {}
-    expected_settings = ["n_reads", "read_length", "fragment_size"]
+    expected_settings = [
+	"nHomozygousDeletions",
+        "nHeterozygousDeletions",
+        "nTandemDuplications", "maxEventLength",
+        "minEventLength", "outdir", "fa_file",
+        "cnv_db", "target_chrs", "target_bed"]
 
     def run(self):
-        print("running running running ...")
 
+        _mod_fastas_script = os.path.join(
+            this_dir_path, "cnv_exomes",
+            "RSVSim_generate_modified_genome.R")
 
+        cmd="./" + _mod_fastas_script
+        cmd+=" --nHomozygousDeletions {nHomozygousDeletions}"
+        cmd+=" --nHeterozygousDeletions {nHeterozygousDeletions}"
+        cmd+=" --nTandemDuplications {nTandemDuplications}"
+        cmd+=" --maxEventLength {maxEventLength}"
+        cmd+=" --minEventLength {minEventLength}"
+        cmd+=" --outdir {outdir}"
+        cmd+=" --fa_file {fa_file}"
+        cmd+=" --cnv_db {cnv_db}" 
+        cmd+=" --target_chrs {target_chrs}"
+        cmd+=" --target_bed {target_bed}"
+        cmd = cmd.format(**self.module_settings)
+
+        try:
+            logger.info(cmd)
+            subprocess.check_call(cmd, shell=True)
+        except Exception as e:
+            raise PipelineExc(e)
+
+        fastas = {"contig-1": "{outdir}/genome_rearranged1.fasta".format(**self.module_settings),
+                  "contig-2": "{outdir}/genome_rearranged2.fasta".format(**self.module_settings)}
+
+        csv_files = ["insertions1.csv",
+                     "insertions2.csv",
+                     "deletions.csv",
+                     "deletions1.csv",
+                     "deletions2.csv",
+                     "tandemDuplications.csv",
+                     "tandemDuplications1.csv",    
+                     "tandemDuplications2.csv"]
+
+        self.db_api.set_fastas(fastas["contig-1"], fastas["contig-2"])
 
 ###########################################################
 class VLRDVCF(ModuleBase):
@@ -165,8 +204,6 @@ class AltContigVCF(ModuleBase):
             self.module_settings["contig-primary-to"] = _to
         except Exception as e:
             raise PipelineExc('Failed to find start-stop index in primary {}'.format(e))
-
-        # import pdb; pdb.set_trace()
 
         # get contig 2 start stop indexes ( context specific )
         logger.info("find indexes in alt-contig 2 that corresponds to subrange in primary ")
