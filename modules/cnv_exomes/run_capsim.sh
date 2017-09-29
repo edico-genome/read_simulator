@@ -6,7 +6,7 @@ set -e
 #####################################################
 # constants
 
-JAPSA_CAPSIM=/home/gavinp/.usr/local/bin/jsa.sim.capsim
+JAPSA_CAPSIM="/home/gavinp/.usr/local/bin/jsa.sim.capsim"
 
 # list of processed probes files to select from
 PROBE_FILES=(\
@@ -21,7 +21,6 @@ RANDOM=$$$(date +%s)
 # Read the options this was called with
 usage=$(cat <<EOF
 usage: $(basename $0) 
-  -e                              probe entry (directory)
   -n			          number of reads
   -l                              read length
   -f                              fragment length
@@ -31,20 +30,18 @@ usage: $(basename $0)
 EOF
 )
 
-while getopts ':n:l:f:e:' opt ; do
+while getopts ':1:2:n:l:f:o:' opt ; do
     case "$opt" in
     1) mod_fasta1="${OPTARG}" ;;
     2) mod_fasta2="${OPTARG}" ;;	
     n) N_READS="${OPTARG}" ;;
     l) READ_LENGTH="${OPTARG}" ;;
     f) FRAG_LENGTH="${OPTARG}" ;;
-    e) entry="D_${OPTARG}"
-       if [[ ! -d $entry  ]]; then
-	   echo "Entry: $entry must be a directory"
-	   # exit 1
-       fi
-       ;;
-    o) outdir="${OPTARG}" ;;
+    o) outdir="${OPTARG}"
+       if [[ ! -d $outdir  ]]; then
+	   echo "Outdir: $outdir does must exist"
+	   exit 1
+       fi ;;
     :) echo "$usage"
        exit 1 ;;    
     *) echo "$usage"
@@ -56,7 +53,7 @@ done
 echo ""
 echo "SETTINGS"
 echo "=============================="
-for key in entry N_READS READ_LENGTH FRAG_LENGTH outdir; do
+for key in mod_fasta1 mod_fasta2 N_READS READ_LENGTH FRAG_LENGTH outdir; do
     eval value=\${$key}
     if [[ -z "$value" ]]; then
 	echo "Missing argument: $key"
@@ -69,8 +66,6 @@ for key in entry N_READS READ_LENGTH FRAG_LENGTH outdir; do
 done
 echo "=============================="
 
-echo "DONE"
-exit 0
 
 #####################################################
 function run {
@@ -82,53 +77,65 @@ function run {
 #####################################################
 # MAIN
 
-echo "Working on $entry"
 
 # avoid nextera - it is not working properly in the 
 # simulator - seems to be a capsim issue, maybe related to length
 selected_probe=${PROBE_FILES[$RANDOM % ${#PROBE_FILES[@]} ]}
 
-echo "Processing $entry $selected_probe "
-SAMP_DIR=$PWD/$entry
-
-pushd $entry
-echo $entry $selected_probe
-echo "pwd = $PWD"
-
+echo "Processing $selected_probe "
 cmd="bowtie2-build $mod_fasta1 $outdir/bowtie_ref1"; run "$cmd"
 cmd="bowtie2-build $mod_fasta2 $outdir/bowtie_ref2"; run "$cmd"
 
-# add -p NTHREADS for multiple threads
-# samp9->164851 lines
-# samp9->164851 lines
-cmd="bowtie2 --local --very-sensitive-local --mp 8 --rdg 10,8 --rfg 10,8 -k 10000 -f -x bowtie_ref2 -U $selected_probe -S $outdir/probes.sam"; run "$cmd"
+cmd="bowtie2 --local --very-sensitive-local --mp 8 --rdg 10,8 --rfg 10,8 -k 10000 -f -x $outdir/bowtie_ref1 -U $selected_probe -S $outdir/probes.sam"; run "$cmd"
+
+cmd="bowtie2 --local --very-sensitive-local --mp 8 --rdg 10,8 --rfg 10,8 -k 10000 -f -x $outdir/bowtie_ref2 -U $selected_probe -S $outdir/probes.sam"; run "$cmd"
 
 #bowtie2 --local --fast-local --mp 8 --rdg 10,8 --rfg 10,8 -k 10000 -f -x bowtie_ref -U $selected_probe -S probes.sam # samp9 -> 67575 lines
 
-cmd="/home/gavinp/bin/bin/samtools view -b $outdir/probes.sam | /home/gavinp/bin/bin/samtools sort -o $outdir/probes.bam"; run "$cmd"
+# cmd="samtools view -b $outdir/probes.sam | samtools sort -o $outdir/probes.bam"; run "$cmd"
 
-cmd="samtools index $outdir/probes.bam"; run "$cmd"
+cmd="samtools sort $outdir/probes.sam $outdir/probes_sorted"; run "$cmd"
+cmd="samtools index $outdir/probes_sorted.bam"; run "$cmd"
 
-capsim_options=" --probe probes.bam --ID someid --fmedian $FRAG_LENGTH --miseq output --illen $READ_LENGTH --num $N_READS"
+capsim_options=" --probe $outdir/probes_sorted.bam --ID someid --fmedian $FRAG_LENGTH --miseq $outdir/output --illen $READ_LENGTH --num $N_READS "
+
+# set java
+ORIGINAL_PATH="$PATH"
+echo "Set Java Version: 1.8.0"
+export PATH="/usr/java/jdk1.8.0_72/jre/bin:$PATH"
+echo "Export PATH : $PATH"
+
 
 # run for 1st haplotype
-cmd="$JAPSA_CAPSIM --reference genome_rearranged1.fasta $capsim_options --logFile $outdir/capsim1.log"
+cmd="$JAPSA_CAPSIM --reference $mod_fasta1 $capsim_options --logFile $outdir/capsim1.log "; run "$cmd"
 cmd="mv $outdir/output_1.fastq.gz $outdir/output_ref1_1.fastq.gz"; run "$cmd"
 cmd="mv $outdir/output_2.fastq.gz $outdir/output_ref1_2.fastq.gz"; run "$cmd"
 
 # run for 2nd haplotype
-cmd="$JAPSA_CAPSIM --reference genome_rearranged2.fasta $capsim_options --logFile $outdir/capsim2.log"
+cmd="$JAPSA_CAPSIM --reference $mod_fasta2 $capsim_options --logFile $outdir/capsim2.log "; run "$cmd"
 cmd="mv $outdir/output_1.fastq.gz $outdir/output_ref2_1.fastq.gz"; run "$cmd"
 cmd="mv $outdir/output_2.fastq.gz $outdir/output_ref2_2.fastq.gz"; run "$cmd"
+
+# reset java
+echo "Reset Java to original version"
+export PATH="$ORIGINAL_PATH"
+
 
 # merge results
 # fq1
 cmd="cat $outdir/output_ref1_1.fastq.gz $outdir/output_ref2_1.fastq.gz"
 echo "$cmd > $outdir/output_1.fastq.gz"
 $cmd > $outdir/output_1.fastq.gz
+
 # fq2
 cmd="cat $outdir/output_ref1_2.fastq.gz $outdir/output_ref2_2.fastq.gz"
 echo "$cmd > $outdir/output_2.fastq.gz"
 $cmd > $outdir/output_2.fastq.gz
 
-echo "Finished $entry"
+echo "done"
+
+
+
+
+
+

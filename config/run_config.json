@@ -1,7 +1,23 @@
 [
   {
-    "description": "CNV Exomes",
+    "description": "Example AltContig with homozygous alt contigs - tested on Draco",
     "on/off": 1,
+    "pipeline_name": "AltContig",
+    "dataset_name": "alt_contig_chr6_heter_primary_GL000250_hg19coords",
+    "reference": "hg19_alt_aware_with_hs37d5_hg38",
+    "outdir": "/mnt/archive/sim_data/dSim",
+    "module_settings": {
+      "AltContigVCF": {
+            "contig-1": "chr6_GL000250v2_alt",
+            "contig-2": "chr6",
+            "alt-sam": "/mnt/vault/reference_genomes/Hsapiens/alt-aware/hs38DH.hg38-to-hg19.liftover.alt-contigs.sam"},
+      "Pirs": {"useIndelErrors": 0}
+    }
+  } 
+, 
+  {
+    "description": "CNV Exomes",
+    "on/off": 0,
     "pipeline_name": "CNVExomes",
     "dataset_name": "cnv_exome",
     "reference": "hg19",
@@ -27,22 +43,6 @@
     }
   }
   ,
-  {
-    "description": "Example AltContig with homozygous alt contigs",
-    "on/off": 0,
-    "pipeline_name": "AltContig",
-    "dataset_name": "alt_contig_chr6_homozygous_GL000250v2",
-    "reference": "hg38",
-    "outdir": "/mnt/archive/sim_data/dSim",
-    "module_settings": {
-      "AltContigVCF": {
-            "contig-1": "chr6_GL000250v2_alt",
-            "contig-2": "chr6_GL000250v2_alt",
-            "alt-sam": "/opt/bwakit-0.7.12-0/resource-GRCh38/hs38DH.fa.alt"},
-      "Pirs": {"useIndelErrors": 0}
-    }
-  }
-,
   {
     "description": "Example AltContig with heterozygous alt contigs",
     "on/off": 0,
