@@ -30,29 +30,35 @@ def check_output(cmd):
 class CNVExomeModFastas(ModuleBase):
     default_settings = {}
     expected_settings = [
-	"nHomozygousDeletions",
+        "nHomozygousDeletions",
         "nHeterozygousDeletions",
         "nTandemDuplications", "maxEventLength",
         "minEventLength", "outdir", "fa_file",
         "cnv_db", "target_chrs", "target_bed"]
 
+    def get_refs(self):
+        self.get_dataset_ref()
+        self.get_target_bed()
+        for key in ["ref_type", "fasta_file"]:
+            if not self.module_settings[key]:
+                msg = "{}, dataset {} missing: {}".format(self.name, self.dataset_name, key)
+                raise PipelineExc(msg)
+
     def run(self):
+        self.get_refs()
+        _mod_fastas_script = os.path.join(this_dir_path, "cnv_exomes", "RSVSim_generate_modified_genome.R")
 
-        _mod_fastas_script = os.path.join(
-            this_dir_path, "cnv_exomes",
-            "RSVSim_generate_modified_genome.R")
-
-        cmd=_mod_fastas_script
-        cmd+=" --nHomozygousDeletions {nHomozygousDeletions}"
-        cmd+=" --nHeterozygousDeletions {nHeterozygousDeletions}"
-        cmd+=" --nTandemDuplications {nTandemDuplications}"
-        cmd+=" --maxEventLength {maxEventLength}"
-        cmd+=" --minEventLength {minEventLength}"
-        cmd+=" --outdir {outdir}"
-        cmd+=" --fa_file {fa_file}"
-        cmd+=" --cnv_db {cnv_db}" 
-        cmd+=" --target_chrs {target_chrs}"
-        cmd+=" --target_bed {target_bed}"
+        cmd =_mod_fastas_script
+        cmd += " --nHomozygousDeletions {nHomozygousDeletions}"
+        cmd += " --nHeterozygousDeletions {nHeterozygousDeletions}"
+        cmd += " --nTandemDuplications {nTandemDuplications}"
+        cmd += " --maxEventLength {maxEventLength}"
+        cmd += " --minEventLength {minEventLength}"
+        cmd += " --outdir {outdir}"
+        cmd += " --fa_file {fasta_file}"
+        cmd += " --cnv_db {cnv_db}"
+        cmd += " --target_chrs {target_chrs}"
+        cmd += " --target_bed {target_bed}"
         cmd = cmd.format(**self.module_settings)
 
         try:
@@ -74,6 +80,7 @@ class CNVExomeModFastas(ModuleBase):
                      "tandemDuplications2.csv"]
 
         self.db_api.set_fastas(fastas["contig-1"], fastas["contig-2"])
+
 
 ###########################################################
 class VLRDVCF(ModuleBase):
@@ -158,10 +165,9 @@ class AltContigVCF(ModuleBase):
             c_idx_to = c_idx + "-to"
             contig_name = self.module_settings[c_idx]
             self.module_settings[c_idx_from] = 1
-            self.module_settings[c_idx_to] = self.ht_config[contig_name]
+            self.module_settings[c_idx_to] = self.module_settings["ht_table_config"][contig_name]
         except Exception as e:
-            logger.error("Contig len not found in line: {}".format(line))
-            logger.error(e)
+            raise PipelineExc("Contig not found: {}".format(e))
 
         for i in [c_idx_from, c_idx_to]:
             assert isinstance(self.module_settings[i], int), \
@@ -173,7 +179,7 @@ class AltContigVCF(ModuleBase):
         now find corresponding region in primary """
 
         # get contig 1 start stop indexes
-        self.get_contig_length_from_dict_file("contig-1")
+        self.get_contig_length_from_cfg("contig-1")
 
         # get primary contig start stop indexes
         logger.info("find primary contig start stop indexes")
@@ -256,7 +262,6 @@ class AltContigVCF(ModuleBase):
         self.db_api.post_truth_vcf(self.module_settings["truth_vcf"])
 
     def run(self):
-        import pdb; pdb.set_trace()
         self.get_dataset_ref()
         self.get_ht_cfg()
         self.identify_contig_types_and_use_case()
@@ -264,6 +269,51 @@ class AltContigVCF(ModuleBase):
         self.create_modified_fastas()
         self.create_truth_vcf()
         self.add_module_settings_to_saved_outputs_dict()
+
+
+###########################################################
+class Capsim(ModuleBase):
+    default_settings = {}
+    expected_settings = ["number-of-reads", "read-len", "fragment-size"]
+
+    def run(self):
+        # get modified fastas
+        try:
+            rv = self.db_api.get_fastas()
+            for f in ['fasta0', 'fasta1']:
+                self.module_settings[f] = rv[f]
+        except Exception as e:
+            raise PipelineExc('Capsim is missing a required modified Fasta: {}'.format(e))
+
+        # run
+        logger.info('Capsim: simulating reads ...')
+        script_path = os.path.join(this_dir_path, "modules", "cnv_exomes", "run_capsim.sh")
+        log = os.path.join(self.module_settings['outdir'], "capsim.log")
+        self.module_settings['capsim_log'] = log
+
+        cmd = script_path + \
+            " -n {number-of-reads}" + \
+            " -l {read-len}" + \
+            " -f {fragment-size}" + \
+            " -o {outdir}" + \
+            " -1 {fasta0} -2 {fasta1}"
+
+        cmd = cmd.format(**self.module_settings)
+
+        logger.info("Capsim cmd: {}".format(cmd))
+        try:
+            subprocess.check_output(cmd, shell=True)
+        except Exception() as e:
+            logging.error('Error message %s' % e)
+            raise
+
+        # update results
+        logger.info('find the Capsim generated FQs and upload to DB')
+        fq_lists = []
+        for i in ["1", "2"]:
+            p = os.path.join(self.module_settings["outdir"], 'output_' + i + '.fastq.gz')
+            fq_lists.append(glob.glob(p))
+        self.db_api.post_reads(fq_lists[0][0], fq_lists[1][0])
 
 
 ###########################################################

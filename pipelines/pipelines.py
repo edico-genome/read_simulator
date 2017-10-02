@@ -17,4 +17,4 @@ class AltContig(PipelinesBase):
 
 
 class CNVExomes(PipelinesBase):
-    modules = [CNVExomeModFastas]
+    modules = [CNVExomeModFastas, Capsim]

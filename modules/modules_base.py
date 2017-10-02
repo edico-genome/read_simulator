@@ -109,10 +109,10 @@ class ModuleBase(object):
 
     def get_ht_cfg(self):
         key = "hash_table5"
-        hash_dir = self.get_from_db(self.dataset_name, key)
-        if hash_dir[:-1] = "\\":
+        hash_dir = self.db_api.get_from_db(self.dataset_name, key)
+        if hash_dir[:-1] == "\\":
             hash_dir = hash_dir[:-1]
-        cfg_file = os.path.join(hash_dir, "hash_table.cfg")
+        self.module_settings["hash_table_cfg"] = os.path.join(hash_dir, "hash_table.cfg")
         try:
             res = parse_ht_config(cfg_file)
             return res
