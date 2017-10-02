@@ -1,25 +1,7 @@
-import logging
-
-logger = logging.getLogger(__name__)
-
-
-class PipelineExc(Exception):
-    """
-    only a specific pipeline failed, still continue with next pipelines
-    """
-    pass
-
-
-class Fatal(Exception):
-    """
-    exception in the dsim run, all pipelines abort
-    """
-    pass
+#!/usr/bin/env python
 
 def parse_ht_config(cfg_file):
-    """
-    a function to parse the ht config file and extract sequence length
-    """
+
     d = {}
     nr_names = 0
     nr_len = 0
@@ -51,3 +33,5 @@ def parse_ht_config(cfg_file):
             if not nr_names == nr_len:
                 raise Exception("parsing ht failed {} != {}".format(nr_names, nr_len))
     return d
+
+

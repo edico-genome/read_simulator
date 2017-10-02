@@ -5,6 +5,7 @@ import argparse
 from lib import sim_logger
 from lib.settings import Settings
 from pipelines import pipelines
+from lib.common import PipelineExc
 
 
 logger = sim_logger.logging.getLogger(__name__)
@@ -61,7 +62,14 @@ def instantiate_pipelines():
 def run_pipelines(pipelines):
     logger.info("\nRUNNING PIPELINES\n")
     for pipeline in pipelines:
-        pipeline.run()
+        try:
+            pipeline.run()
+        except PipelineExc as e:
+            logger.error("Pipeline failed: {}".format(e), exc_info=True) 
+        except Exception as e:
+            logger.error("Fatal error: {}".format(e), exc_info=True)
+            sys.exit(1)
+
 
     logger.info("\nSIMULATOR SUMMARY\n")
     for pipeline in pipelines:
@@ -89,6 +97,6 @@ if __name__ == '__main__':
 
     logger.info("\nINPUT SETTINGS\n")
     settings = Settings(args.run_settings)
-
+    settings.print_settings()
     main()
 

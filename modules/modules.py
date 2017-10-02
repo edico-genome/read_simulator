@@ -6,11 +6,11 @@ import os
 import sys
 import glob
 import logging
-from vlrd import vlrd_functions
 import subprocess
 from modules_base import ModuleBase
 from lib.common import PipelineExc
 from enum import Enum
+from vlrd import vlrd_functions
 
 
 logger = logging.getLogger(__name__)
@@ -20,9 +20,9 @@ this_dir_path = os.path.dirname(os.path.realpath(__file__))
 ###########################################################
 def check_output(cmd):
     """ helper function to run cmd """
-    logger.debug("Run cmd: {}".format(cmd))
+    logger.info("Run cmd: {}".format(cmd))
     res = subprocess.check_output(cmd, shell=True)
-    logger.debug("Response: {}".format(res))
+    logger.info("Response: {}".format(res))
     return res
 
 
@@ -147,32 +147,21 @@ class AltContigVCF(ModuleBase):
             else:
                 self.module_settings["contigs_combo_type"] = ContigComboType.diff_alts
 
-    def get_contig_length_from_dict_file(self, contig_key):
+    def get_contig_length_from_cfg(self, contig_key):
         """ lookup alt contig length in dict """
         assert contig_key in ["contig-1", "contig-2"]
         logger.info("Get contig {} ranges".format(contig_key))
 
-        with open(self.module_settings["dict_file"], 'r') as stream:
-
+        try:
             c_idx = contig_key
             c_idx_from = c_idx + "-from"
             c_idx_to = c_idx + "-to"
             contig_name = self.module_settings[c_idx]
-
             self.module_settings[c_idx_from] = 1
-
-            # end = length of contig
-            for line in stream:
-                len_col = line.split()[2]
-                if "LN" in len_col:
-                    if contig_name in line:
-                        try:
-                            c_len = int(len_col.replace("LN:", ""))
-                            self.module_settings[c_idx_to] = c_len
-                            logger.debug("{}: {}".format(c_idx, c_len))
-                        except Exception as e:
-                            logger.error("Contig len not found in line: {}".format(line))
-                            logger.error(e)
+            self.module_settings[c_idx_to] = self.ht_config[contig_name]
+        except Exception as e:
+            logger.error("Contig len not found in line: {}".format(line))
+            logger.error(e)
 
         for i in [c_idx_from, c_idx_to]:
             assert isinstance(self.module_settings[i], int), \
@@ -267,7 +256,9 @@ class AltContigVCF(ModuleBase):
         self.db_api.post_truth_vcf(self.module_settings["truth_vcf"])
 
     def run(self):
+        import pdb; pdb.set_trace()
         self.get_dataset_ref()
+        self.get_ht_cfg()
         self.identify_contig_types_and_use_case()
         self.get_contig_start_stop_indexes()
         self.create_modified_fastas()

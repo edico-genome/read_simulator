@@ -5,7 +5,7 @@ A module defines a unit of work ( creating a truth VCF/ fasta etc )
 import os
 import sys
 import logging
-from lib.common import PipelineExc
+from lib.common import PipelineExc, parse_ht_config
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 logger = logging.getLogger(__name__)
@@ -72,9 +72,9 @@ class ModuleBase(object):
                 logger.info("create module outdir: {}".format(self.module_settings['outdir']))
                 os.makedirs(self.module_settings['outdir'])
             except Exception as e:
-                logger.error("Failed to create directory: {}, exception: {}".
-                             format(self.module_settings['outdir'], e))
-                sys.exit(1)
+                msg = "Failed to create directory: {}, exception: {}".format(
+                    self.module_settings['outdir'], e)
+                raise PipelineExc(msg)
 
         self.validate_module_settings()
 
@@ -99,13 +99,25 @@ class ModuleBase(object):
     def get_dataset_ref(self):
         rv = self.db_api.get_dataset_ref_info()
 
-        keys = ["ref_type", "fasta_file", "dict_file"]
+        keys = ["ref_type", "fasta_file"]
         for key in keys:
             self.module_settings[key] = rv[key]
             if not self.module_settings[key]:
-                msg = "{}, dataset {} missing: {}"
+                msg = "{}, dataset {} missing HT reference file: {}"
                 msg = msg.format(self.name, self.dataset_name, key)
                 raise PipelineExc(msg)
+
+    def get_ht_cfg(self):
+        key = "hash_table5"
+        hash_dir = self.get_from_db(self.dataset_name, key)
+        if hash_dir[:-1] = "\\":
+            hash_dir = hash_dir[:-1]
+        cfg_file = os.path.join(hash_dir, "hash_table.cfg")
+        try:
+            res = parse_ht_config(cfg_file)
+            return res
+        except:
+            raise PipelineExc("Failed to parse the HT config file for contig lengths")
 
     def get_target_bed(self):
         self.module_settings["target_bed"] = self.db_api.get_target_bed()
