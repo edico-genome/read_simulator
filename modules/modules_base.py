@@ -54,7 +54,7 @@ class ModuleBase(object):
             assert self.module_settings[key], "missing key {} for {}".format(key, self.name)
 
     def parse_settings(self):
-        for key in ["dataset_name", "module_settings", "outdir", "reference"]:
+        for key in ["dataset_name", "module_settings", "outdir", "reference", "workdir"]:
             value = self.pipeline_settings.get(key, None)
             if not value:
                 self.fail("'{}' not specified".format(key), self.name)
@@ -63,6 +63,12 @@ class ModuleBase(object):
         self.module_settings = self.pipeline_settings["module_settings"].get(self.name, {})
         if not self.module_settings:
             logging.warning("'{}' not specified within run_config: module_settings".format(self.name))
+
+        workdir = self.pipeline_settings.get("workdir", None)
+        if not os.path.isdir(workdir):
+            msg = "workdir: {} is not a valid directory".format(workdir)
+            raise PipelineExc(msg)
+        self.module_settings["workdir"] = self.pipeline_settings["workdir"]
 
         # create sub directory for each module
         self.module_settings['outdir'] = os.path.join(

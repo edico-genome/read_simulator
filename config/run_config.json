@@ -30,13 +30,14 @@
       "Pirs": {"useIndelErrors": 0}
     }
   } 
-, 
+  , 
   {
     "on/off": 1,
     "pipeline_name": "CNVExomes",
     "dataset_name": "cnv_exome",
-    "reference": "hg19",
+    "reference": "hs37d5",
     "outdir": "/mnt/archive/sim_data/dSim",
+    "workdir": "/staging/tmp",
     "module_settings": {
       "CNVExomeModFastas": {
         "nHomozygousDeletions": 10,
@@ -45,7 +46,7 @@
 	    "maxEventLength": 40000,
 	    "minEventLength": 1000,
 	    "outdir": "/staging/tmp",
-        "target_chrs": "20",
+	    "target_chrs": "20",
 	    "target_bed": "/mnt/archive/gavinp/1000_genomes/20120518.consensus_add50bp.chrom.bed",
 	    "cnv_db": "/home/gavinp/Downloads/GRCh37_hg19_variants_2016-05-15.allCNVs_in_20120518_targets.bed"
 	},

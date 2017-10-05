@@ -92,7 +92,7 @@ if ( opt$target_chrs != "NULL"){
 # e.g. "/mnt/archive/gavinp/1000_genomes/20120518.consensus_add50bp.chrom.bed"
 target_cnv_db <- read.table(opt$target_bed)
 
-print("Parse options complete")
+print("RSVSim Parse options complete")
 
 ##################################################
 # define function removeOverlappingRegions(regions)

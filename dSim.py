@@ -1,24 +1,13 @@
 #!/usr/bin/env python
 
-import sys, copy
-import argparse
+from lib import ensure_running_in_venv_upon_import
+import sys, copy, argparse
 from lib import sim_logger
 from lib.settings import Settings
 from pipelines import pipelines
 from lib.common import PipelineExc
 
-
 logger = sim_logger.logging.getLogger(__name__)
-
-
-def ensure_running_in_venv():
-    """ confirm that we are running in a virtualenv """
-    test1 = hasattr(sys, 'real_prefix')
-    test2 = hasattr(sys, 'base_prefix') and (sys.base_prefix != sys.prefix)
-    if not (test1 or test2):
-        print "Please run in appropriate Python2.7 venv"
-        sys.exit(1)
-
 
 def pipeline_factory(pipeline_name):
     """
@@ -45,7 +34,7 @@ def instantiate_pipelines():
     _pipelines = []
     logger.info("\nVALIDATING PIPELINES\n")
     for pipeline_settings in settings.runs:
-        if pipeline_settings.get("on/off", "on") in [0, None, "off"]:
+        if pipeline_settings.get("on/off", "off") in [0, None, "off"]:
             continue
         else:
             num_runs = pipeline_settings.get("num_runs", 1)
@@ -90,7 +79,6 @@ def main():
 if __name__ == '__main__':
     """
     """
-    ensure_running_in_venv()
     parser = argparse.ArgumentParser()
     parser.add_argument('-r', '--run_settings', action='store', required=True)
     args = parser.parse_args()
