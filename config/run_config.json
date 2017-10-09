@@ -1,75 +1,25 @@
 [
   {
-    "_description": "Example AltContig with homozygous alt contigs",
     "on/off": 1,
-    "pipeline_name": "AltContig",
-    "dataset_name": "alt_contig_chr6_homozygous_GL000250v2",
-    "reference": "hg38",
+    "pipeline_name": "VLRD",
+    "dataset_name": "vlrd_normalnoise_errorrate_hs37d5_0.005",
+    "reference": "hs37d5",
     "outdir": "/mnt/archive/sim_data/dSim",
     "module_settings": {
-      "AltContigVCF": {
-            "contig-1": "chr6_GL000250v2_alt",
-            "contig-2": "chr6_GL000250v2_alt",
-            "alt-sam": "/opt/bwakit-0.7.12-0/resource-GRCh38/hs38DH.fa.alt"},
+      "VLRDVCF": {"varrate": 0.005},
       "Pirs": {"useIndelErrors": 0}
     }
   }
-,
-  {
-    "_description": "Example AltContig with heterozygous alt contigs",
-    "on/off": 1,
-    "pipeline_name": "AltContig",
-    "dataset_name": "alt_contig_chr6_heterzygous_GL000250v2_251",
-    "reference": "hg38",
-    "outdir": "/mnt/archive/sim_data/dSim",
-    "module_settings": {
-      "AltContigVCF": {
-            "contig-1": "chr6_GL000250v2_alt",
-            "contig-2": "chr6_GL000251v2_alt",
-            "alt-sam": "/opt/bwakit-0.7.12-0/resource-GRCh38/hs38DH.fa.alt"},
-      "Pirs": {"useIndelErrors": 0}
-    }
-  }
-,
-  {
-    "_description": "Example AltContig with heterozygous contigs (one is alt, other is primary)",
-    "on/off": 1,
-    "pipeline_name": "AltContig",
-    "dataset_name": "alt_contig_chr6_heterzygous_GL000250v2_primary",
-    "reference": "hg38",
-    "outdir": "/mnt/archive/sim_data/dSim",
-    "module_settings": {
-      "AltContigVCF": {
-            "contig-1": "chr6_GL000250v2_alt",
-            "contig-2": "chr6",
-            "alt-sam": "/opt/bwakit-0.7.12-0/resource-GRCh38/hs38DH.fa.alt"},
-      "Pirs": {"useIndelErrors": 0}
-    }
-  }
-,
+  ,
   {
     "on/off": 0,
     "pipeline_name": "VLRD",
-    "dataset_name": "vlrd_chr1_normalNoise_varRate0.002",
+    "dataset_name": "vlrd_chr1_normalNoise_varRate0.005",
     "reference": "hg19",
     "outdir": "/mnt/archive/sim_data/dSim",
     "module_settings": {
-      "VLRDVCF": {"varrate": 0.002},
+      "VLRDVCF": {"varrate": 0.005},
       "Pirs": {"useIndelErrors": 0}
-    }
-  }
-,
-  {
-    "on/off": 0,
-    "pipeline_name": "CompositeDataset",
-    "dataset_name": "test_dataset",
-    "reference": "hg19",
-    "outdir": "/mnt/archive/sim_data/dSim",
-    "module_settings": {
-      "composite_dataset": {
-        "dataset1": 0.5,
-        "dataset2": 0.5
-      }
     }
   }
 ]

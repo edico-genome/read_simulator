@@ -69,7 +69,7 @@ def print_vcf(settings):
 
                 # only print actual variants
                 if ((alt_0 == alt_1) and (ref_0 == alt_0)):
-                    return
+                    continue
 
                 # snps and inserts are easy
                 alt = []
@@ -143,13 +143,13 @@ def define_variants(settings):
     with open(settings['target_bed']) as regions:
         for reg in regions:
             _chr, _from, _to = reg.split()[0:3]
-            _from = int(_from)
+            _from = int(_from) + random.randint(0, 20)
             _to = int(_to)
             # avoid boundary effects
             if _to - 100 <= _from:
                 logger.error('Please make sure regions are > 100bp')
                 sys.exit(1)
-            _from += 50
+            _from += 50 
             _to -= 50
             _pos = range(_from, _to, bases_between_variants)
             _allele1 = [sample_variant() for i in range(len(_pos))]
@@ -299,7 +299,7 @@ def write_fasta_to_file(settings, haplotype):
 def parse_ref_fasta(settings):
     logger.info('parse reference fasta')
 
-    with open_gz_safe(settings['ref_fasta']) as stream:
+    with open_gz_safe(settings['fasta_file']) as stream:
         settings['length_of_fasta_line'] = None
         this_header = None
         settings['parsed_fasta'] = OrderedDict()
@@ -313,13 +313,13 @@ def parse_ref_fasta(settings):
             #    print 'BREAK'
             #    break
 
-            if ((len(line) < 20) and ('chr' in line)):
+            if ((len(line.split()[0]) < 40) and ('>' in line)):
                 # dump old chr
                 if this_header:
                     settings['parsed_fasta'][this_header] = this_chr_fasta
                 # transition to new chr
                 print('Parsing fasta chr: {}'.format(line))
-                this_header = line
+                this_header = line.split()[0].strip()
                 this_chr_fasta = []
             else:
                 this_chr_fasta.append(line)
