@@ -50,16 +50,17 @@ def print_vcf(settings):
     with open(truth_vcf, 'w') as stream_out:
         write_vcf_header(stream_out)
 
-        chrs = [c.replace('>','') for c in settings['parsed_fasta']]
-        for chr in chrs:
+        for chr in settings['parsed_fasta']:
             print("Adding chr {} to VCF".format(chr))
             if chr not in settings['var_info_for_vcf']:
-                print("- continue")
+                print("- no variants in chr {}- continue".format(chr))
                 continue
+
+            # loop over all variants in chr
             for var_info in reversed(settings['var_info_for_vcf'][chr]):
                 genotype = [None, None]
                 pos, ref_0, ref_1, alt_0, alt_1 = var_info
-                assert ref_0[0] == ref_1[0]
+                assert ((ref_0[0] == ref_1[0]))
 
                 # variant template
                 qual = '.'
@@ -68,44 +69,39 @@ def print_vcf(settings):
                 genotype_template = '{}:1,1000:1000:10:10000,1000,0:0,1,1000,1000'
 
                 # only print actual variants
-                if ((alt_0 == alt_1) and (ref_0 == alt_0)):
+                if ((alt_0 == alt_1) and (ref_0 == alt_0) and (ref_1 == ref_0)):
                     continue
 
-                # snps and inserts are easy
-                alt = []
-                genotype = [0, 0]
-                if ((len(ref_0) == 1) and (len(ref_1) == 1)):
-                    for idx, i in enumerate([alt_0, alt_1]):
-                        if ref_0 != i:
-                            alt.append(i)
-                            genotype[idx] = len(alt)
+                # normalize variants ( e.g. for heter insertion and deletion ) 
+                geno = "unknown" 
+                alleles = []
+                longest_ref = ref_0 if len(ref_0) > len(ref_1) else ref_1
 
-                    variant = {
-                        'chr': chr,  # offset 1
-                        'pos': pos + 1,
-                        'ref': ref_0,
-                        'alt': ','.join(alt),
-                        'qual': qual,
-                        'format': format,
-                        'info': info,
-                        'genotype': genotype_template.format('|'.join([str(g) for g in genotype]))
-                    }
-                    write_vcf_line(variant, stream_out)
+                for ref, alt in zip((ref_0, ref_1), (alt_0, alt_1)):
+                    if ref != longest_ref:
+                        alt = alt + longest_ref[len(ref):]
 
-                # deletions - split over 2 lines
-                if not ((len(ref_0) == 1) and (len(ref_1) == 1)):
-                    for ref, alt, geno in zip((ref_0, ref_1), (alt_0, alt_1), ('0|1', '1|0')):
-                        variant = {
-                            'chr': chr,  # offset 1
-                            'pos': pos + 1,
-                            'ref': ref,
-                            'alt': alt,
-                            'qual': qual,
-                            'format': format,
-                            'info': info,
-                        'genotype': genotype_template.format(geno)
-                        }
-                        write_vcf_line(variant, stream_out)
+                    if alt == longest_ref: # if this is an actual variant then the other allele must differ
+                        geno = "0|1"
+                    else:
+                        if alt in alleles: # this allele was already defined - i.e. homozygous
+                            geno = "1|1"
+                        else:
+                            alleles.append(alt)  
+                            if len(alleles) == 2: # is this the second allele we're appending?
+                                geno = "1|2"
+
+                variant = {
+                    'chr': chr,  
+                    'pos': pos + 1,
+                    'ref': longest_ref,
+                    'alt': ",".join(alleles),
+                    'qual': qual,
+                    'format': format,
+                    'info': info,
+                    'genotype': genotype_template.format(geno)
+                }
+                write_vcf_line(variant, stream_out)
 
 
 def open_gz_safe(file_path):
@@ -119,12 +115,15 @@ def sample_variant():
     vars = (('snp', 'G'),
             ('snp', 'C'),
             ('snp', 'A'),
-            ('snp', 'T'),
-            ('ins', 'AT'),
-            ('del', 2))
+            # ('snp', 'T'),
+            # ('ins', 'AT'),
+            # ('ins', 'CAT'),
+            ('del', 2),
+            ('del', 3)
+    )
 
-    # r = random.randint(0, len(vars)-1)
-    r = random.randint(0, 4)
+    r = random.randint(0, len(vars)-1)
+    # r = random.randint(0, 4)
     return vars[r]
 
 
@@ -168,20 +167,18 @@ def define_variants(settings):
 def add_variants_to_fasta(settings):
     logger.info('adding variants to fasta')
 
-    settings['mod_fasta'] = [None, None]
-    print("Deep copy fasta 0")
-    settings['mod_fasta'][0] = deepcopy(settings['parsed_fasta'])
-    print("Deep copy fasta 1")
-    settings['mod_fasta'][1] = deepcopy(settings['parsed_fasta'])
+    logger.info("Deep copy Fastas") # only copy and sample from chromosomes where we add variants
+    settings['mod_fasta'] = [{}, {}]
+    for _chr in settings['sampled_vars']:
+        logger.info("- {}".format(_chr))
+        settings['mod_fasta'][0][_chr] = deepcopy(settings['parsed_fasta'][_chr])
+        settings['mod_fasta'][1][_chr] = deepcopy(settings['parsed_fasta'][_chr])
 
-    for chr in settings['sampled_vars']:
+    for _chr in settings['sampled_vars']:
         # update fasta in reverse so that indels
         # do not mix up the index positions for unmodified variants
 
-        # fasta requires chr in '>'chr format
-        f_chr = '>'+chr
-
-        for var_info in reversed(settings['sampled_vars'][chr]):
+        for var_info in reversed(settings['sampled_vars'][_chr]):
 
             index_in_chr_where_to_inject = var_info[0]
             alleles_0_1 = var_info[1:]
@@ -196,9 +193,9 @@ def add_variants_to_fasta(settings):
             alt = [None, None]
             ref = [None, None]
 
-            this_fasta_line = settings['parsed_fasta'][f_chr][fasta_line_index]
+            this_fasta_line = settings['parsed_fasta'][_chr][fasta_line_index]
             try:
-                next_fasta_line = settings['parsed_fasta'][f_chr][fasta_line_index+1]
+                next_fasta_line = settings['parsed_fasta'][_chr][fasta_line_index+1]
             except:
                 next_fasta_line = None
 
@@ -212,7 +209,7 @@ def add_variants_to_fasta(settings):
                     ref[haplotype] = this_fasta_line[fasta_line_rel_pos]
                     alt[haplotype] = allele[1]
                     #  update fasta
-                    settings['mod_fasta'][haplotype][f_chr][fasta_line_index] = \
+                    settings['mod_fasta'][haplotype][_chr][fasta_line_index] = \
                         this_fasta_line[:fasta_line_rel_pos] + \
                         allele[1] + \
                         this_fasta_line[fasta_line_rel_pos+1:]
@@ -222,18 +219,14 @@ def add_variants_to_fasta(settings):
                     #  get info for vcf
                     ref[haplotype] = this_fasta_line[fasta_line_rel_pos]
                     alt[haplotype] = ref[haplotype] + allele[1]
-                    #  update fasta
-                    settings['mod_fasta'][haplotype][f_chr][fasta_line_index] = \
+                    #  update fastaf_c
+                    settings['mod_fasta'][haplotype][_chr][fasta_line_index] = \
                         this_fasta_line[:fasta_line_rel_pos+1] + \
                         allele[1] + \
                         this_fasta_line[fasta_line_rel_pos+1:]
 
                 # DELs
                 if allele[0] == 'del':
-
-                    raise Exception("deletions not currently supported")
-
-                    """
                     # check if this deletion flows into the next line
                     deletion_end_index = fasta_line_rel_pos + allele[1]
                     len_this_line = len(this_fasta_line)
@@ -247,11 +240,12 @@ def add_variants_to_fasta(settings):
                         alt[haplotype] = ref[haplotype][0]
 
                         # update fasta
-                        settings['mod_fasta'][haplotype][f_chr][fasta_line_index] = \
-                            this_fasta_line[:fasta_line_rel_pos+1] + \
-                            'D'*allele[1] + \
-                            this_fasta_line[fasta_line_rel_pos+allele[1]+1:]
+                        settings['mod_fasta'][haplotype][_chr][fasta_line_index] = \
+                            this_fasta_line[:fasta_line_rel_pos+1] + this_fasta_line[fasta_line_rel_pos+allele[1]+1:]
+                            # 'D'*allele[1] + 
+                            # this_fasta_line[fasta_line_rel_pos+allele[1]+1:]
 
+                    # if this deletion overflows into next line
                     else:
                         #  get info for vcf
                         # allele[1] indicates how long the deletion is
@@ -260,24 +254,25 @@ def add_variants_to_fasta(settings):
                         alt[haplotype] = ref[haplotype][0]
 
                         # first cut the deletion from the end of this line
-                        settings['mod_fasta'][haplotype][f_chr][fasta_line_index] = \
-                            this_fasta_line[:fasta_line_rel_pos+1] + \
-                            'D'*(len_this_line - 1 - fasta_rel_index)
+                        settings['mod_fasta'][haplotype][_chr][fasta_line_index] = \
+                            this_fasta_line[:fasta_line_rel_pos+1] # + 
+                            # 'D'*(len_this_line - 1 - fasta_rel_index)
 
                         # then cut the overflow from the start of the next line
-                        settings['mod_fasta'][haplotype][f_chr][fasta_line_index+1][fasta_line_rel_pos+1:] = \
-                            'D'*del_overflow_into_next_line + \
-                            next_fasta_line[del_overflow_into_next_line:]
-                    """
+                        # settings['mod_fasta'][haplotype][f_chr][fasta_line_index+1][fasta_line_rel_pos+1:] = \
+                        settings['mod_fasta'][haplotype][_chr][fasta_line_index+1] = next_fasta_line[del_overflow_into_next_line:]
+                            # 'D'*del_overflow_into_next_line + 
+                            # next_fasta_line[del_overflow_into_next_line:]
 
-            # provide the information we'll need for the VCF
-            if chr not in settings['var_info_for_vcf']:
-                settings['var_info_for_vcf'][chr] = []
-            settings['var_info_for_vcf'][chr].append((
+            # store the information we'll need for the VCF
+            if _chr not in settings['var_info_for_vcf']:
+                settings['var_info_for_vcf'][_chr] = []
+            settings['var_info_for_vcf'][_chr].append((
                 index_in_chr_where_to_inject, ref[0], ref[1], alt[0], alt[1]))
 
 
 def write_fasta_to_file(settings, haplotype):
+    """ """
 
     fasta_out = os.path.join(
         settings['outdir'], 'haplotype_{}.fasta'.format(haplotype))
@@ -288,10 +283,12 @@ def write_fasta_to_file(settings, haplotype):
     with open(fasta_out, 'w') as stream_out:
         # for chr in settings['mod_fasta'][haplotype]:
         for chr in settings['parsed_fasta']: #  ordered dict - preserve fasta order
+            if chr not in settings['mod_fasta'][0]:
+                continue
+            # chr header
             print("Writing chr {}".format(chr))
-            # make everything of same line length
-            stream_out.write("{}\n".format(chr))
-            # import pdb; pdb.set_trace()
+            stream_out.write(">{}\n".format(chr))
+            # variants
             for line in settings['mod_fasta'][haplotype][chr]:
                 stream_out.write("{}\n".format(line))
 
@@ -309,18 +306,19 @@ def parse_ref_fasta(settings):
         for line in stream:
             counter += 1
             line = line.replace('\n', '')
-            # if counter > 100000:
-            #    print 'BREAK'
-            #    break
 
             if ((len(line.split()[0]) < 40) and ('>' in line)):
                 # dump old chr
                 if this_header:
                     settings['parsed_fasta'][this_header] = this_chr_fasta
                 # transition to new chr
-                print('Parsing fasta chr: {}'.format(line))
-                this_header = line.split()[0].strip()
+                this_header = line.split()[0].strip().replace(">", "")
+                print('Parsing fasta chr: {}'.format(this_header))
                 this_chr_fasta = []
+                
+                ## for testing
+                #if len(settings['parsed_fasta']) > 1:
+                #    break
             else:
                 this_chr_fasta.append(line)
                 if not settings['length_of_fasta_line']:

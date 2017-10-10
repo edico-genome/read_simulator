@@ -1,6 +1,6 @@
 [
   {
-    "on/off": 1,
+    "on/off": 0,
     "pipeline_name": "VLRD",
     "dataset_name": "vlrd_normalnoise_errorrate_hs37d5_0.005",
     "reference": "hs37d5",
@@ -12,10 +12,10 @@
   }
   ,
   {
-    "on/off": 0,
+    "on/off": 1,
     "pipeline_name": "VLRD",
     "dataset_name": "vlrd_chr1_normalNoise_varRate0.005",
-    "reference": "hg19",
+    "reference": "hs37d5",
     "outdir": "/mnt/archive/sim_data/dSim",
     "module_settings": {
       "VLRDVCF": {"varrate": 0.005},
