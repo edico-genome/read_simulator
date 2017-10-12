@@ -43,10 +43,12 @@ def write_vcf_line(variant, stream_out):
 
 
 def print_vcf(settings):
-    truth_vcf = os.path.join(settings['outdir'], 'truth.vcf')
-    settings['truth_vcf'] = truth_vcf
-    logger.info('Generate truth VCF: {}'.format(truth_vcf))
+    """ create normalized truth vcf """
 
+    truth_vcf = os.path.join(settings['outdir'], 'truth.vcf')
+    normalized_truth_vcf = os.path.join(settings['outdir'], 'normalized_truth.vcf')
+
+    logger.info('Generate truth VCF: {}'.format(truth_vcf))
     with open(truth_vcf, 'w') as stream_out:
         write_vcf_header(stream_out)
 
@@ -82,14 +84,14 @@ def print_vcf(settings):
                         alt = alt + longest_ref[len(ref):]
 
                     if alt == longest_ref: # if this is an actual variant then the other allele must differ
-                        geno = "0|1"
+                        geno = "0/1"
                     else:
                         if alt in alleles: # this allele was already defined - i.e. homozygous
-                            geno = "1|1"
+                            geno = "1/1"
                         else:
                             alleles.append(alt)  
                             if len(alleles) == 2: # is this the second allele we're appending?
-                                geno = "1|2"
+                                geno = "1/2"
 
                 variant = {
                     'chr': chr,  
@@ -102,6 +104,12 @@ def print_vcf(settings):
                     'genotype': genotype_template.format(geno)
                 }
                 write_vcf_line(variant, stream_out)
+                
+    # normalize 
+    cmd = "bcftools norm -f {} {} > {}".format(settings['fasta_file'], truth_vcf, normalized_truth_vcf)
+    logger.info('{}'.format(cmd))
+    subprocess.check_output(cmd, shell=True)
+    settings['truth_vcf'] = normalized_truth_vcf
 
 
 def open_gz_safe(file_path):
@@ -112,15 +120,16 @@ def open_gz_safe(file_path):
 
 
 def sample_variant():
-    vars = (('snp', 'G'),
-            ('snp', 'C'),
-            ('snp', 'A'),
-            # ('snp', 'T'),
-            # ('ins', 'AT'),
-            # ('ins', 'CAT'),
-            ('del', 2),
-            ('del', 3)
-    )
+    vars = (
+        #('snp', 'G'),
+        #('snp', 'C'),
+        #('snp', 'A'),
+        # ('snp', 'T'),
+        # ('ins', 'AT'),
+        # ('ins', 'CAT'),
+        # ('del', 2),
+        ('del', 3)
+        )
 
     r = random.randint(0, len(vars)-1)
     # r = random.randint(0, 4)
@@ -152,7 +161,7 @@ def define_variants(settings):
             _to -= 50
             _pos = range(_from, _to, bases_between_variants)
             _allele1 = [sample_variant() for i in range(len(_pos))]
-            _allele2 = [sample_variant() for i in range(len(_pos))]
+            _allele2 = [None for i in range(len(_pos))]
 
             if _chr not in settings['sampled_vars']:
                 settings['sampled_vars'][_chr] = []
@@ -202,6 +211,12 @@ def add_variants_to_fasta(settings):
             for haplotype in [0, 1]:
                 # allele index 0 = type, index 1 = attribute
                 allele = alleles_0_1[haplotype]
+
+                # set this allele to ref
+                if not allele:
+                    ref[haplotype] = this_fasta_line[fasta_line_rel_pos]
+                    alt[haplotype] = this_fasta_line[fasta_line_rel_pos]
+                    continue
 
                 # SNPs
                 if allele[0] == 'snp':
@@ -260,9 +275,8 @@ def add_variants_to_fasta(settings):
 
                         # then cut the overflow from the start of the next line
                         # settings['mod_fasta'][haplotype][f_chr][fasta_line_index+1][fasta_line_rel_pos+1:] = \
-                        settings['mod_fasta'][haplotype][_chr][fasta_line_index+1] = next_fasta_line[del_overflow_into_next_line:]
-                            # 'D'*del_overflow_into_next_line + 
-                            # next_fasta_line[del_overflow_into_next_line:]
+                        settings['mod_fasta'][haplotype][_chr][fasta_line_index+1] = next_fasta_line[del_overflow_into_next_line+1:]
+                        # 'D'*del_overflow_into_next_line + # next_fasta_line[del_overflow_into_next_line:]
 
             # store the information we'll need for the VCF
             if _chr not in settings['var_info_for_vcf']:
@@ -350,6 +364,3 @@ def create_truth_vcf_and_fastas(settings):
            "fasta1": settings['mod_fasta_path_1']}
 
     return res
-
-
-
