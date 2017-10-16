@@ -46,7 +46,8 @@ def print_vcf(settings):
     """ create normalized truth vcf """
 
     truth_vcf = os.path.join(settings['outdir'], 'truth.vcf')
-    normalized_truth_vcf = os.path.join(settings['outdir'], 'normalized_truth.vcf')
+    norm_split_vcf = os.path.join(settings['outdir'], 'norm_split_truth.vcf')
+    norm_merged_vcf = os.path.join(settings['outdir'], 'norm_merged_truth.vcf')
 
     logger.info('Generate truth VCF: {}'.format(truth_vcf))
     with open(truth_vcf, 'w') as stream_out:
@@ -66,7 +67,7 @@ def print_vcf(settings):
 
                 # variant template
                 qual = '.'
-                info = 'N/A'
+                info = '.'
                 format = 'GT:AD:DP:GQ:PL:SB'
                 genotype_template = '{}:1,1000:1000:10:10000,1000,0:0,1,1000,1000'
 
@@ -105,11 +106,18 @@ def print_vcf(settings):
                 }
                 write_vcf_line(variant, stream_out)
                 
-    # normalize 
-    cmd = "bcftools norm -f {} {} > {}".format(settings['fasta_file'], truth_vcf, normalized_truth_vcf)
+    # normalize split 
+    cmd = "bcftools norm -f {} {} > {}".format(settings['fasta_file'], truth_vcf, norm_split_vcf)
     logger.info('{}'.format(cmd))
     subprocess.check_output(cmd, shell=True)
-    settings['truth_vcf'] = normalized_truth_vcf
+
+    # normalize merge
+    cmd = "bcftools norm -m +any -N {} > {}".format(norm_split_vcf, norm_merged_vcf)
+    logger.info('{}'.format(cmd))
+    subprocess.check_output(cmd, shell=True)
+
+    # set truth
+    settings['truth_vcf'] = norm_merged_vcf
 
 
 def open_gz_safe(file_path):
@@ -121,18 +129,36 @@ def open_gz_safe(file_path):
 
 def sample_variant():
     vars = (
-        #('snp', 'G'),
-        #('snp', 'C'),
-        #('snp', 'A'),
-        # ('snp', 'T'),
-        # ('ins', 'AT'),
+        ('snp', 'G'),
+        ('snp', 'C'),
+        ('snp', 'A'),
+        ('snp', 'T'),
+        ('snp', 'G'),
+        ('snp', 'C'),
+        ('snp', 'A'),
+        ('snp', 'T'),
+        ('snp', 'G'),
+        ('snp', 'C'),
+        ('snp', 'A'),
+        ('snp', 'T'),
+        ('snp', 'G'),
+        ('snp', 'C'),
+        ('snp', 'A'),
+        ('snp', 'T'),
+        #  ('ins', 'AT'),
         # ('ins', 'CAT'),
-        # ('del', 2),
-        ('del', 3)
+        ('del', 1),
+        ('del', 2),
+        ('del', 3),
+        ('del', 4),
+        ('del', 5),
+        ('del', 6),
+        ('del', 10),
+        ('del', 20),
+        ('del', 50),
         )
 
     r = random.randint(0, len(vars)-1)
-    # r = random.randint(0, 4)
     return vars[r]
 
 
@@ -161,7 +187,8 @@ def define_variants(settings):
             _to -= 50
             _pos = range(_from, _to, bases_between_variants)
             _allele1 = [sample_variant() for i in range(len(_pos))]
-            _allele2 = [None for i in range(len(_pos))]
+            _allele2 = [sample_variant() for i in range(len(_pos))]
+            # _allele2 = [None for i in range(len(_pos))] # for heter allelles
 
             if _chr not in settings['sampled_vars']:
                 settings['sampled_vars'][_chr] = []
