@@ -4,6 +4,10 @@
 \.\#*
 venv_x86/*
 venv/*
+venv_ppc/*
+logs/*
 *.log
 \.idea
 \.idea/*
+modules/bamsurgeon
+./modules/bamsurgeon/*

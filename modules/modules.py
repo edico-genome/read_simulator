@@ -33,6 +33,7 @@ class VLRDVCF(ModuleBase):
                     self.name, self.dataset_name, key))
                 sys.exit(1)
 
+
     def run(self):
         self.get_refs()
         res = vlrd_functions.create_truth_vcf_and_fastas(self.module_settings)
@@ -252,8 +253,10 @@ class Pirs(ModuleBase):
         log = os.path.join(self.module_settings['outdir'], "pirs.log")
         self.module_settings['pirs_log'] = log
 
+        self.module_settings["insert-len-mean"] = 400
+
         cmd = "pirs simulate -l 100 -x 30 -o {outdir}/pirs" + \
-              " --insert-len-mean=180 --insert-len-sd=18 --diploid " + \
+              " --insert-len-mean={insert-len-mean} --insert-len-sd=40 --diploid " + \
               " --base-calling-profile={PE100}" + \
               " --indel-error-profile={indels}" + \
               " --gc-bias-profile={gcdep}" + \
@@ -270,12 +273,18 @@ class Pirs(ModuleBase):
             self.logger.error('Error message %s' % e)
             raise
 
-        self.logger.info('find the pirs generated FQs and upload to DB')
+        self.logger.info('Find the pirs generated FQs and upload to DB')
         fq_lists = []
         for i in ["1", "2"]:
-            p = os.path.join(self.module_settings["outdir"], 'pirs*' + i + '.fq.gz')
-            fq_lists.append(glob.glob(p))
-        self.db_api.post_reads(fq_lists[0][0], fq_lists[1][0])
+            p = os.path.join(self.module_settings["outdir"], 'pirs*{}_{}.fq.gz'.format(
+                    self.module_settings["insert-len-mean"], i))
+            p_res = glob.glob(p)
+
+            if len(p_res) != 1: 
+                raise PipelineExc("Too many/few matching fastqs found in Pirs output folder: {}".format(p_res))
+            fq_lists.append(p_res[0])
+
+        self.db_api.post_reads(fq_lists[0], fq_lists[1])
 
         p = os.path.join(self.module_settings["outdir"], 'pirs*read.info.gz')
         l = glob.glob(p)

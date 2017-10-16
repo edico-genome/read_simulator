@@ -1,13 +1,17 @@
 [
   {
+<<<<<<< HEAD
     "_description": "Example AltContig with homozygous alt contigs",
     "on/off": 0,
-    "pipeline_name": "VLRD",
-    "dataset_name": "vlrd_normalnoise_errorrate_hs37d5_0.005",
-    "reference": "hs37d5",
+    "pipeline_name": "AltContig",
+    "dataset_name": "alt_contig_chr6_homozygous_GL000250v2",
+    "reference": "hg38",
     "outdir": "/mnt/archive/sim_data/dSim",
     "module_settings": {
-      "VLRDVCF": {"varrate": 0.005},
+      "AltContigVCF": {
+            "contig-1": "chr6_GL000250v2_alt",
+            "contig-2": "chr6_GL000250v2_alt",
+            "alt-sam": "/opt/bwakit-0.7.12-0/resource-GRCh38/hs38DH.fa.alt"},
       "Pirs": {"useIndelErrors": 0}
     }
   }
@@ -34,16 +38,19 @@
     "pipeline_name": "AltContig",
     "dataset_name": "alt_contig_chr6_heterzygous_GL000250v2_primary",
     "reference": "hg38",
+=======
+    "on/off": 1,
+    "pipeline_name": "VLRD",
+    "dataset_name": "vlrd_normalnoise_errorrate_hs37d5_0.005",
+    "reference": "hs37d5",
+>>>>>>> 1b80811268fc624c0a1f223b5f473cbcd317ce1a
     "outdir": "/mnt/archive/sim_data/dSim",
     "module_settings": {
-      "AltContigVCF": {
-            "contig-1": "chr6_GL000250v2_alt",
-            "contig-2": "chr6",
-            "alt-sam": "/opt/bwakit-0.7.12-0/resource-GRCh38/hs38DH.fa.alt"},
+      "VLRDVCF": {"varrate": 0.005},
       "Pirs": {"useIndelErrors": 0}
     }
   }
-,
+  ,
   {
     "on/off": 0,
     "pipeline_name": "VLRD",
