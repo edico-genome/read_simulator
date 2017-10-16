@@ -1,20 +1,31 @@
 [
   {
-    "_description": "Example AltContig with homozygous alt contigs",
-    "on/off": 0,
-    "pipeline_name": "VLRD",
-    "dataset_name": "vlrd_normalnoise_errorrate_hs37d5_0.005",
+    "on/off": 1,
     "reference": "hs37d5",
     "outdir": "/mnt/archive/sim_data/dSim",
+    "workdir": "/staging/tmp/cnv",
     "module_settings": {
-      "VLRDVCF": {"varrate": 0.005},
-      "Pirs": {"useIndelErrors": 0}
+      "CNVExomeModFastas": {
+        "nHomozygousDeletions": 200,
+	    "nHeterozygousDeletions": 200,
+	    "nTandemDuplications": 400,
+	    "maxEventLength": 40000,
+	    "minEventLength": 1000,
+	    "target_chrs": "20",
+	    "target_bed": "/mnt/archive/gavinp/1000_genomes/20120518.consensus_add50bp.chrom.bed",
+	    "cnv_db": "/home/gavinp/Downloads/GRCh37_hg19_variants_2016-05-15.allCNVs_in_20120518_targets.bed"
+	},
+      "Capsim": {
+        "number-of-reads": 1000000,
+        "read-len": 100,
+        "fragment-size": 300
+        }
     }
   }
-,
+  , 
   {
-    "_description": "Example AltContig with heterozygous alt contigs",
-    "on/off": 1,
+    "description": "Example AltContig with heterozygous alt contigs",
+    "on/off": 0,
     "pipeline_name": "AltContig",
     "dataset_name": "alt_contig_chr6_heterzygous_GL000250v2_251",
     "reference": "hg38",
@@ -29,7 +40,7 @@
   }
 ,
   {
-    "_description": "Example AltContig with heterozygous contigs (one is alt, other is primary)",
+    "description": "Example AltContig with heterozygous contigs (one is alt, other is primary)",
     "on/off": 0,
     "pipeline_name": "AltContig",
     "dataset_name": "alt_contig_chr6_heterzygous_GL000250v2_primary",

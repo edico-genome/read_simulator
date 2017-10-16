@@ -6,17 +6,193 @@ import os
 import sys
 import glob
 import logging
-from vlrd import vlrd_functions
 import subprocess
 from modules_base import ModuleBase
 from lib.common import PipelineExc
 from enum import Enum
-
+from vlrd import vlrd_functions
+from cnv_exomes import create_truth_vcf
 
 this_dir_path = os.path.dirname(os.path.realpath(__file__))
 
 
 ###########################################################
+def check_output(cmd):
+    """ helper function to run cmd """
+    self.logger.info("Run cmd: {}".format(cmd))
+    res = subprocess.check_output(cmd, shell=True)
+    self.logger.info("Response: {}".format(res))
+    return res
+
+
+###########################################################
+class CNVExomeModFastas(ModuleBase):
+    default_settings = {}
+    expected_settings = [
+        "nHomozygousDeletions",
+        "nHeterozygousDeletions",
+        "nTandemDuplications", "maxEventLength",
+        "minEventLength", "outdir", "workdir",
+        "cnv_db", "target_bed"]
+
+
+    def get_refs(self):
+        self.get_dataset_ref()
+        for key in ["ref_type", "fasta_file"]:
+            if not self.module_settings[key]:
+                msg = "{}, dataset {} missing: {}".format(self.name, self.dataset_name, key)
+                raise PipelineExc(msg)
+
+    def add_contig_names_to_target_bed(self):
+        self.module_settings['target_bed_contigs_named'] = "{}_contigs_named".format(
+            self.module_settings['target_bed'])
+        self.pipeline_settings["lock"].acquire()
+        with open(self.module_settings['target_bed']) as stream_in, \
+             open(self.module_settings['target_bed_contigs_named'], 'w') as stream_out:
+            stream_out.write("contig\tstart\tstop\tname\n")
+            for idx, line in enumerate(stream_in):
+                new_line = "{}\ttarget-{}\n".format(line.replace("\n",""), idx+1)
+                stream_out.write(new_line)
+        print("Wrote results to: {}".format(self.module_settings['target_bed_contigs_named']))
+        self.pipeline_settings["lock"].release()
+        
+
+    def remove_contig_name_descriptions(self):
+        """ the RSVSim tool fails when we use fastas with long contig names like 
+        >1 dna:chromosome chromosome:GRCh37:1:1:249250621:1 
+        this function strips the crud and copies the file to staging """
+
+        # only have one process create this file
+        self.pipeline_settings["lock"].acquire()
+        basename = os.path.basename(self.module_settings["fasta_file"])
+        new_fasta = os.path.join(self.module_settings["workdir"], "{}_mod".format(basename))
+
+        if os.path.isfile(new_fasta):
+            print("preprocessed fasta file ready for use by RSVSim")            
+        else:
+            print("preprocessing fasta file for use by RSVSim")            
+            with open(self.module_settings["fasta_file"], 'r') as stream_in, \
+                 open(new_fasta, "w") as stream_out:
+                try:
+                    for line in stream_in:
+                        if line[0] == ">":
+                            line = "{}\n".format(line.split()[0])
+                        stream_out.write(line)
+                except:
+                    logger.error("Failed to preprocess fasta line: {}".format(e), exc_info=True)
+                    raise
+                    
+            cmd = "samtools faidx {}".format(new_fasta)
+            logger.info(cmd)
+            subprocess.check_call(cmd, shell=True)
+        self.pipeline_settings["lock"].release()
+        self.module_settings["fasta_file"] = new_fasta
+
+
+    def run(self):
+        self.get_refs()
+        self.remove_contig_name_descriptions()
+
+        _mod_fastas_script = os.path.join(this_dir_path, "cnv_exomes", "RSVSim_generate_modified_genome.R")
+
+        cmd =_mod_fastas_script
+        cmd += " --nHomozygousDeletions {nHomozygousDeletions}"
+        cmd += " --nHeterozygousDeletions {nHeterozygousDeletions}"
+        cmd += " --nTandemDuplications {nTandemDuplications}"
+        cmd += " --maxEventLength {maxEventLength}"
+        cmd += " --minEventLength {minEventLength}"
+        cmd += " --outdir {outdir}"
+        cmd += " --fa_file {fasta_file}"
+        cmd += " --cnv_db {cnv_db}"
+        if self.module_settings.get("target_chrs", None):
+            cmd += " --target_chrs {target_chrs}"
+        cmd += " --target_bed {target_bed}"
+        cmd = cmd.format(**self.module_settings)
+
+        try:
+            logger.info(cmd)
+            subprocess.check_call(cmd, shell=True)
+        except Exception as e:
+            raise PipelineExc(e)
+
+
+        # create truth
+        csv_files = ["insertions1.csv",
+                     "insertions2.csv",
+                     "deletions1.csv",
+                     "deletions2.csv",
+                     "tandemDuplications1.csv",    
+                     "tandemDuplications2.csv"]
+        csv_files = [os.path.join(self.module_settings["outdir"], csv) for csv in csv_files]
+        
+        for f in csv_files:
+            assert os.path.isfile(f), "file does not exist"
+
+        try:
+            truth_vcf, truth_tsv = create_truth_vcf.create_truth_files(
+                self.module_settings["fasta_file"],
+                self.module_settings['outdir'], csv_files)
+        except Exception as e:
+            logger.error("Failed to create truth files: {}".format(e), exc_info=True)
+            raise PipelineExc()
+
+        # get modified fasta files
+        fastas = {"contig-1": "{outdir}/genome_rearranged1.fasta".format(**self.module_settings),
+                  "contig-2": "{outdir}/genome_rearranged2.fasta".format(**self.module_settings)}
+
+        # update db with results
+        # dragen CVN require contig names
+        self.add_contig_names_to_target_bed()
+        logger.info("renamed target bed: {}".format(self.module_settings['target_bed_contigs_named']))
+        self.db_api.upload_to_db('cnv_target_bed', self.module_settings['target_bed_contigs_named'])
+        self.db_api.upload_to_db('cnv_truth', truth_tsv)
+        self.db_api.upload_to_db('truth_set_vcf', truth_vcf)
+        self.db_api.set_fastas(fastas["contig-1"], fastas["contig-2"])
+
+
+###########################################################
+class Capsim(ModuleBase):
+    default_settings = {}
+    expected_settings = ["number-of-reads", "read-len", "fragment-size"]
+
+    def run(self):
+        # get modified fastas
+        try:
+            rv = self.db_api.get_fastas()
+            for f in ['fasta0', 'fasta1']:
+                self.module_settings[f] = rv[f]
+        except Exception as e:
+            raise PipelineExc('Capsim is missing a required modified Fasta: {}'.format(e))
+
+        # run
+        logger.info('Capsim: simulating reads ...')
+        script_path = os.path.join(this_dir_path, "cnv_exomes", "run_capsim.sh")
+        log = os.path.join(self.module_settings['outdir'], "capsim.log")
+        self.module_settings['capsim_log'] = log
+
+        cmd = script_path + \
+            " -n {number-of-reads}" + \
+            " -l {read-len}" + \
+            " -f {fragment-size}" + \
+            " -o {outdir}" + \
+            " -1 {fasta0} -2 {fasta1}"
+
+        cmd = cmd.format(**self.module_settings)
+
+        logger.info("Capsim cmd: {}".format(cmd))
+        try:
+            subprocess.check_output(cmd, shell=True)
+        except Exception() as e:
+            logging.error('Error message %s' % e)
+            raise
+
+        # update results
+        logger.info('find the Capsim generated FQs and upload to DB')
+        fq_lists = []
+        for i in ["1", "2"]:
+            p = os.path.join(self.module_settings["outdir"], 'output_' + i + '.fastq.gz')
+            fq_lists.append(glob.glob(p))
+        self.db_api.post_reads(fq_lists[0][0], fq_lists[1][0])
 
 
 ###########################################################
@@ -32,7 +208,6 @@ class VLRDVCF(ModuleBase):
                 self.logger.info("{}, dataset {} missing: {}".format(
                     self.name, self.dataset_name, key))
                 sys.exit(1)
-
 
     def run(self):
         self.get_refs()
@@ -99,32 +274,20 @@ class AltContigVCF(ModuleBase):
             else:
                 self.module_settings["contigs_combo_type"] = ContigComboType.diff_alts
 
-    def get_contig_length_from_dict_file(self, contig_key):
+    def get_contig_length_from_cfg(self, contig_key):
         """ lookup alt contig length in dict """
         assert contig_key in ["contig-1", "contig-2"]
-        self.logger.info("Get contig {} ranges from dict file".format(contig_key))
+        logger.info("Get contig {} ranges".format(contig_key))
 
-        with open(self.module_settings["dict_file"], 'r') as stream:
-
+        try:
             c_idx = contig_key
             c_idx_from = c_idx + "-from"
             c_idx_to = c_idx + "-to"
             contig_name = self.module_settings[c_idx]
-
             self.module_settings[c_idx_from] = 1
-
-            # end = length of contig
-            for line in stream:
-                len_col = line.split()[2]
-                if "LN" in len_col:
-                    if contig_name in line:
-                        try:
-                            c_len = int(len_col.replace("LN:", ""))
-                            self.module_settings[c_idx_to] = c_len
-                            self.logger.debug("{}: {}".format(c_idx, c_len))
-                        except Exception as e:
-                            self.logger.error("Contig len not found in line: {}".format(line))
-                            self.logger.error(e)
+            self.module_settings[c_idx_to] = self.module_settings["ht_table_config"][contig_name]
+        except Exception as e:
+            raise PipelineExc("Contig not found: {}".format(e))
 
         for i in [c_idx_from, c_idx_to]:
             assert isinstance(self.module_settings[i], int), \
@@ -136,7 +299,7 @@ class AltContigVCF(ModuleBase):
         now find corresponding region in primary """
 
         # get contig 1 start stop indexes
-        self.get_contig_length_from_dict_file("contig-1")
+        self.get_contig_length_from_cfg("contig-1")
 
         # get primary contig start stop indexes
         self.logger.info("Find primary contig start stop indexes")
@@ -157,10 +320,8 @@ class AltContigVCF(ModuleBase):
         except Exception as e:
             raise PipelineExc('Failed to find start-stop index in primary {}'.format(e))
 
-        # import pdb; pdb.set_trace()
-
         # get contig 2 start stop indexes ( context specific )
-        self.logger.info("find indexes in alt-contig 2 that corresponds to subrange in primary ")
+        self.logger.info("Find indexes in alt-contig 2 that corresponds to subrange in primary ")
         if self.module_settings["contigs_combo_type"] == ContigComboType.alt_prim:
             self.module_settings["contig-2-from"] = self.module_settings["contig-primary-from"]
             self.module_settings["contig-2-to"] = self.module_settings["contig-primary-to"]
@@ -222,6 +383,7 @@ class AltContigVCF(ModuleBase):
 
     def run(self):
         self.get_dataset_ref()
+        self.get_ht_cfg()
         self.identify_contig_types_and_use_case()
         self.get_contig_start_stop_indexes()
         self.create_modified_fastas()

@@ -83,8 +83,8 @@ class DBAPI(object):
             'value': value
             }
 
-        logger.info("Uploading to db, Url: {}".format(url))
-        logger.info(pprint(data))
+        logger.debug("Uploading to db, Url: {}".format(url))
+        # logger.debug(pprint(data))
         res = requests.post(url, params=data)
         res.raise_for_status()
 
@@ -103,7 +103,6 @@ class DBAPI(object):
         url = "http://data.edicogenome.com/api/get"
 
         _filter = {'name': dataset_name, 'get_x': 'ref_type'}
-
         r = requests.get(url, params=_filter)
         r.raise_for_status()
         r = r.text
@@ -131,7 +130,7 @@ class DBAPI(object):
                 {"key": 43, "value": reference_type, "type": "fk"},
                 {"key": 55, "value": "33", "type": "text"},
                 {"key": 294, "value": "DRAGEN_RGID", "type": "text"},
-                {"key": 295, "value": "DRAGEN_RGSM", "type": "text"},
+                {"key": 295, "value": dataset_name, "type": "text"},
                 {"key": 296, "value": "ILLUMINA", "type": "text"},
                 {"key": 297, "value": "1", "type": "text"},
             ],

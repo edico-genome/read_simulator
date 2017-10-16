@@ -7,7 +7,9 @@ venv/*
 venv_ppc/*
 logs/*
 *.log
+logs/*
 \.idea
 \.idea/*
+.Rhistory
 modules/bamsurgeon
 ./modules/bamsurgeon/*

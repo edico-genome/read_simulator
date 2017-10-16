@@ -30,7 +30,7 @@ class Settings(object):
             default_flow_style=False)
         logger.info(y)
 
-    def print_settings(self, settings):
-        for idx, run in enumerate(settings):
+    def print_settings(self):
+        for idx, run in enumerate(self.runs):
             logger.info("RUN {}".format(idx+1))
             self.log_yaml(run)

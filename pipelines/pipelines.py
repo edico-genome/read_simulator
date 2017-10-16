@@ -12,5 +12,9 @@ class VLRD(PipelinesBase):
 
 
 class AltContig(PipelinesBase):
-    modules = [AltContigVCF, Pirs, AltContigPirsTruthSam]
+    # modules = [AltContigVCF, Pirs, AltContigPirsTruthSam]
+    modules = [AltContigVCF, Pirs]
 
+
+class CNVExomes(PipelinesBase):
+    modules = [CNVExomeModFastas, Capsim]
