@@ -1,63 +1,57 @@
 [
   {
-    "description": "Example AltContig with heterozygous alt contigs",
-    "on/off": 0,
-    "pipeline_name": "AltContig",
-    "dataset_name": "alt_contig_chr6_heterzygous_GL000250v2_251",
-    "reference": "hg38",
-    "outdir": "/mnt/archive/sim_data/dSim",
-    "module_settings": {
-      "AltContigVCF": {
-            "contig-1": "chr6_GL000250v2_alt",
-            "contig-2": "chr6_GL000251v2_alt",
-            "alt-sam": "/opt/bwakit-0.7.12-0/resource-GRCh38/hs38DH.fa.alt"},
-      "Pirs": {"useIndelErrors": 0}
-    }
-  }
-  , 
-  {
-    "description": "Example AltContig with homozygous alt contigs - tested on Draco",
-    "on/off": 0,
-    "pipeline_name": "AltContig",
-    "dataset_name": "alt_contig_chr6_heter_primary_GL000250_hg19coords",
-    "reference": "hg19_alt_aware_with_hs37d5_hg38",
-    "outdir": "/mnt/archive/sim_data/dSim",
-    "module_settings": {
-      "AltContigVCF": {
-            "contig-1": "chr6_GL000250v2_alt",
-            "contig-2": "chr6",
-            "alt-sam": "/mnt/vault/reference_genomes/Hsapiens/alt-aware/hs38DH.hg38-to-hg19.liftover.alt-contigs.sam"},
-      "Pirs": {"useIndelErrors": 0}
-    }
-  } 
-  , 
-  {
     "on/off": 1,
+    "num_runs": 25,
     "pipeline_name": "CNVExomes",
-    "dataset_name": "cnv_exome",
+    "dataset_name": "cnv_exomes_sim",
     "reference": "hs37d5",
     "outdir": "/mnt/archive/sim_data/dSim",
-    "workdir": "/staging/tmp",
+    "workdir": "/staging/tmp/cnv",
     "module_settings": {
       "CNVExomeModFastas": {
-        "nHomozygousDeletions": 10,
-	    "nHeterozygousDeletions": 10,
-	    "nTandemDuplications": 20,
+        "nHomozygousDeletions": 20,
+	    "nHeterozygousDeletions": 20,
+	    "nTandemDuplications": 40,
 	    "maxEventLength": 40000,
 	    "minEventLength": 1000,
-	    "outdir": "/staging/tmp",
-	    "target_chrs": "20",
 	    "target_bed": "/mnt/archive/gavinp/1000_genomes/20120518.consensus_add50bp.chrom.bed",
 	    "cnv_db": "/home/gavinp/Downloads/GRCh37_hg19_variants_2016-05-15.allCNVs_in_20120518_targets.bed"
 	},
       "Capsim": {
-        "number-of-reads": 8000,
+        "number-of-reads": 20000000,
         "read-len": 100,
         "fragment-size": 300
         }
     }
   }
   ,
+  {
+    "on/off": 0,
+    "num_runs": 3,
+    "pipeline_name": "CNVExomes",
+    "dataset_name": "cnv_exomes_sim",
+    "reference": "hs37d5",
+    "outdir": "/mnt/archive/sim_data/dSim",
+    "workdir": "/staging/tmp/cnv",
+    "module_settings": {
+      "CNVExomeModFastas": {
+        "nHomozygousDeletions": 200,
+	    "nHeterozygousDeletions": 200,
+	    "nTandemDuplications": 400,
+	    "maxEventLength": 40000,
+	    "minEventLength": 1000,
+	    "target_chrs": "20",
+	    "target_bed": "/mnt/archive/gavinp/1000_genomes/20120518.consensus_add50bp.chrom.bed",
+	    "cnv_db": "/home/gavinp/Downloads/GRCh37_hg19_variants_2016-05-15.allCNVs_in_20120518_targets.bed"
+	},
+      "Capsim": {
+        "number-of-reads": 1000000,
+        "read-len": 100,
+        "fragment-size": 300
+        }
+    }
+  }
+  , 
   {
     "description": "Example AltContig with heterozygous alt contigs",
     "on/off": 0,

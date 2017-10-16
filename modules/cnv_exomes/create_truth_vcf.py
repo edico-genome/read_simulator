@@ -22,9 +22,11 @@ def run_cmd(cmd):
 
 def get_order_file(fasta, outdir):
     fai_file = "{}.fai".format(fasta)
-    assert os.path.isfile(fai_file)
-    order_file = os.path.join(outdir, "order_file.txt")
+    if not os.path.isfile(fai_file):
+        cmd = "samtools faidx {}".format(fasta)
+        run_cmd(cmd)
 
+    order_file = os.path.join(outdir, "order_file.txt")
     with open(fai_file) as stream_in, open(order_file, 'w') as stream_out:
         for line in stream_in:
             stream_out.write("{}\n".format(line.split()[0]))

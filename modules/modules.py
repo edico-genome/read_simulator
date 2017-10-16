@@ -34,7 +34,7 @@ class CNVExomeModFastas(ModuleBase):
         "nHeterozygousDeletions",
         "nTandemDuplications", "maxEventLength",
         "minEventLength", "outdir", "workdir",
-        "cnv_db", "target_chrs", "target_bed"]
+        "cnv_db", "target_bed"]
 
 
     def get_refs(self):
@@ -44,36 +44,57 @@ class CNVExomeModFastas(ModuleBase):
                 msg = "{}, dataset {} missing: {}".format(self.name, self.dataset_name, key)
                 raise PipelineExc(msg)
 
+    def add_contig_names_to_target_bed(self):
+        self.module_settings['target_bed_contigs_named'] = "{}_contigs_named".format(
+            self.module_settings['target_bed'])
+        self.pipeline_settings["lock"].acquire()
+        with open(self.module_settings['target_bed']) as stream_in, \
+             open(self.module_settings['target_bed_contigs_named'], 'w') as stream_out:
+            stream_out.write("contig\tstart\tstop\tname\n")
+            for idx, line in enumerate(stream_in):
+                new_line = "{}\ttarget-{}\n".format(line.replace("\n",""), idx+1)
+                stream_out.write(new_line)
+        print("Wrote results to: {}".format(self.module_settings['target_bed_contigs_named']))
+        self.pipeline_settings["lock"].release()
+        
+
     def remove_contig_name_descriptions(self):
         """ the RSVSim tool fails when we use fastas with long contig names like 
         >1 dna:chromosome chromosome:GRCh37:1:1:249250621:1 
         this function strips the crud and copies the file to staging """
-        print("preprocessing fasta file for use by RSVSim")
+
+        # only have one process create this file
+        self.pipeline_settings["lock"].acquire()
         basename = os.path.basename(self.module_settings["fasta_file"])
         new_fasta = os.path.join(self.module_settings["workdir"], "{}_mod".format(basename))
-        with open(self.module_settings["fasta_file"], 'r') as stream_in, \
-                open(new_fasta, "w") as stream_out:
-            try:
-                for line in stream_in:
-                    if line[0] == ">":
-                        line = "{}\n".format(line.split()[0])
-                    stream_out.write(line)
-            except:
-                logger.error("Failed to preprocess fasta line: {}".format(e), exc_info=True)
-                raise
 
-        cmd = "samtools faidx {}".format(new_fasta)
-        logger.info(cmd)
-        subprocess.check_call(cmd, shell=True)
-
+        if os.path.isfile(new_fasta):
+            print("preprocessed fasta file ready for use by RSVSim")            
+        else:
+            print("preprocessing fasta file for use by RSVSim")            
+            with open(self.module_settings["fasta_file"], 'r') as stream_in, \
+                 open(new_fasta, "w") as stream_out:
+                try:
+                    for line in stream_in:
+                        if line[0] == ">":
+                            line = "{}\n".format(line.split()[0])
+                        stream_out.write(line)
+                except:
+                    logger.error("Failed to preprocess fasta line: {}".format(e), exc_info=True)
+                    raise
+                    
+            cmd = "samtools faidx {}".format(new_fasta)
+            logger.info(cmd)
+            subprocess.check_call(cmd, shell=True)
+        self.pipeline_settings["lock"].release()
         self.module_settings["fasta_file"] = new_fasta
+
 
     def run(self):
         self.get_refs()
         self.remove_contig_name_descriptions()
 
-        _mod_fastas_script = os.path.join(this_dir_path, "cnv_exomes",
-                                          "RSVSim_generate_modified_genome.R")
+        _mod_fastas_script = os.path.join(this_dir_path, "cnv_exomes", "RSVSim_generate_modified_genome.R")
 
         cmd =_mod_fastas_script
         cmd += " --nHomozygousDeletions {nHomozygousDeletions}"
@@ -84,7 +105,8 @@ class CNVExomeModFastas(ModuleBase):
         cmd += " --outdir {outdir}"
         cmd += " --fa_file {fasta_file}"
         cmd += " --cnv_db {cnv_db}"
-        cmd += " --target_chrs {target_chrs}"
+        if self.module_settings.get("target_chrs", None):
+            cmd += " --target_chrs {target_chrs}"
         cmd += " --target_bed {target_bed}"
         cmd = cmd.format(**self.module_settings)
 
@@ -120,7 +142,10 @@ class CNVExomeModFastas(ModuleBase):
                   "contig-2": "{outdir}/genome_rearranged2.fasta".format(**self.module_settings)}
 
         # update db with results
-        self.db_api.upload_to_db('cnv_target_bed', self.module_settings['target_bed'])
+        # dragen CVN require contig names
+        self.add_contig_names_to_target_bed()
+        logger.info("renamed target bed: {}".format(self.module_settings['target_bed_contigs_named']))
+        self.db_api.upload_to_db('cnv_target_bed', self.module_settings['target_bed_contigs_named'])
         self.db_api.upload_to_db('cnv_truth', truth_tsv)
         self.db_api.upload_to_db('truth_set_vcf', truth_vcf)
         self.db_api.set_fastas(fastas["contig-1"], fastas["contig-2"])

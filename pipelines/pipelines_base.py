@@ -58,8 +58,11 @@ class PipelinesBase(object):
                 inst.after_run()
                 self.exit_status = "COMPLETED"
             except PipelineExc as e:
+                self.exit_status = "FAILED"
                 raise
             except Exception as e:
+                self.exit_status = "FAILED"
                 logger.error("Fatal error: {}".format(e), exc_info=True)
-                sys.exit(1)
+                raise
         logger.removeHandler(fh)
+        

@@ -4,7 +4,9 @@
 \.\#*
 venv_x86/*
 venv/*
+venv_ppc/*
 *.log
+logs/*
 \.idea
 \.idea/*
 .Rhistory
