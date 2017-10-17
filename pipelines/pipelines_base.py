@@ -15,11 +15,18 @@ class PipelinesBase(object):
     """
     __metaclass__ = ABCMeta
 
+    def expected_inputs(self):
+        expected = ["workdir"] 
+        for i in expected:
+            if not i in self.pipeline_settings:
+                raise PipelineExc("Missing setting: {}".format(i))
+
     def __init__(self, settings):
         msg = "validating pipeline: {}".format(self.__class__.__name__)
         logger.info(msg)
         self.exit_status = "FAILED"
         self.pipeline_settings = settings
+        self.expected_inputs()
         self.dataset_name = self.pipeline_settings["dataset_name"]
         self.db_api = DBAPI(self.dataset_name)
         self.module_instances = []
@@ -73,4 +80,5 @@ class PipelinesBase(object):
                 msg = msg.format(self.name, e)
                 self.exit_status = "FAILED"
           	raise PipelineExc(msg)
-            inst.logger.removeHandler(fh)          logger.removeHandler(fh)            inst.logger.removeHandler(fh)
+            inst.logger.removeHandler(fh)      
+        logger.removeHandler(fh)

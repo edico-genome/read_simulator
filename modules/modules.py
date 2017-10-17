@@ -203,7 +203,7 @@ class VLRDVCF(ModuleBase):
     def get_refs(self):
         self.get_dataset_ref()
         self.get_target_bed()
-        for key in ["ref_type", "fasta_file", "dict_file"]:
+        for key in ["ref_type", "fasta_file"]:
             if not self.module_settings[key]:
                 self.logger.info("{}, dataset {} missing: {}".format(
                     self.name, self.dataset_name, key))
