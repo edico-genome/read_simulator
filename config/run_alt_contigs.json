@@ -1,0 +1,33 @@
+[
+  {
+    "description": "Example AltContig with heterozygous alt contigs",
+    "on/off": 0,
+    "pipeline_name": "AltContig",
+    "dataset_name": "alt_contig_chr6_heterzygous_GL000250v2_251",
+    "reference": "hg38",
+    "outdir": "/mnt/archive/sim_data/dSim",
+    "module_settings": {
+      "AltContigVCF": {
+            "contig-1": "chr6_GL000250v2_alt",
+            "contig-2": "chr6_GL000251v2_alt",
+            "alt-sam": "/opt/bwakit-0.7.12-0/resource-GRCh38/hs38DH.fa.alt"},
+      "Pirs": {"useIndelErrors": 0}
+    }
+  }
+,
+  {
+    "description": "Example AltContig with heterozygous contigs (one is alt, other is primary)",
+    "on/off": 0,
+    "pipeline_name": "AltContig",
+    "dataset_name": "alt_contig_chr6_heterzygous_GL000250v2_primary",
+    "reference": "hg38",
+    "outdir": "/mnt/archive/sim_data/dSim",
+    "module_settings": {
+      "AltContigVCF": {
+            "contig-1": "chr6_GL000250v2_alt",
+            "contig-2": "chr6",
+            "alt-sam": "/opt/bwakit-0.7.12-0/resource-GRCh38/hs38DH.fa.alt"},
+      "Pirs": {"useIndelErrors": 0}
+    }
+  }
+]
