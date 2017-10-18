@@ -9,8 +9,8 @@ library(optparse)
 
 print(packageVersion("RSVSim"))
 
-if(packageVersion("RSVSim") < "1.17.0") {
-    stop("Need RSVSim 1.17.0")
+if(packageVersion("RSVSim") < "1.16.0") {
+    stop("Need RSVSim 1.16.0")
 }
 
 

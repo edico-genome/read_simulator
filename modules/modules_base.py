@@ -19,14 +19,14 @@ class ModuleBase(object):
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self, pipeline_settings, db_api):
-        self.logger = logger
+    def __init__(self, pipeline_settings, db_api, local_logger):
         self.name = self.__class__.__name__
+        self.logger = local_logger
         self.logger.info("- validating module: {}".format(self.name))
         self.pipeline_settings = pipeline_settings
-        self.dataset_name = None
         self.module_settings = None
-        self.parse_settings()
+        self.validate_module_settings()
+        self.create_workdir_outdir()
         self.db_api = db_api
 
     @abstractproperty
@@ -48,42 +48,46 @@ class ModuleBase(object):
         pass
 
     def validate_module_settings(self):
-        for key in self.default_settings:
-            if key not in self.module_settings:
-                self.module_settings[key] = self.default_settings[key]
+        """
+        for each module use the default settings
+        if a settings is available in pipeline settings then override
+        assert if setting is never specified
+        """
+        self.module_settings = self.default_settings
         for key in self.expected_settings:
-            assert self.module_settings[key], "missing key {} for {}".format(key, self.name)
-
-    def parse_settings(self):
-        for key in ["dataset_name", "module_settings", "outdir", "reference", "workdir"]:
-            value = self.pipeline_settings.get(key, None)
-            if not value:
-                self.fail("'{}' not specified".format(key), self.name)
-            self.__setattr__(key, value)
-
-        self.module_settings = self.pipeline_settings["module_settings"].get(self.name, {})
-        if not self.module_settings:
-            logging.warning("'{}' not specified within run_config: module_settings".format(self.name))
-
-        workdir = self.pipeline_settings.get("workdir", None)
-        if not os.path.isdir(workdir):
-            msg = "workdir: {} is not a valid directory".format(workdir)
-            raise PipelineExc(msg)
-        self.module_settings["workdir"] = self.pipeline_settings["workdir"]
-
-        # create sub directory for each module
-        self.module_settings['outdir'] = os.path.join(
-            self.outdir, self.pipeline_settings['dataset_name'], self.name)
-        if not os.path.isdir(self.module_settings['outdir']):
-            try:
-                self.logger.info("create module outdir: {}".format(self.module_settings['outdir']))
-                os.makedirs(self.module_settings['outdir'])
-            except Exception as e:
-                msg = "Failed to create directory: {}, exception: {}".format(
-                    self.module_settings['outdir'], e)
+            if key in self.pipeline_settings:
+                self.module_settings[key] = self.pipeline_settings[key]
+            if key not in self.module_settings:
+                msg = "Module: {}, missing settings: {}".format(self.name, key)
                 raise PipelineExc(msg)
 
-        self.validate_module_settings()
+
+    def create_workdir_outdir(self):
+        """
+        create sub directories for each module
+        """
+        # import pdb; pdb.set_trace()
+
+        # workdir 
+        self.module_settings['workdir'] = os.path.join(
+             self.pipeline_settings['workdir'],
+             self.pipeline_settings['dataset_name'], self.name)
+
+        # outdir
+        self.module_settings['outdir'] = os.path.join(
+            self.pipeline_settings['outdir'],
+            self.pipeline_settings['dataset_name'], self.name)
+
+        for _d in ['workdir', 'outdir']:
+            _dir = self.module_settings[_d]
+            if not os.path.isdir(_dir):
+                try:
+                    self.logger.info("Create {}: {}".format(_d, _dir))
+                    os.makedirs(_dir)
+                except Exception as e:
+                    msg = "Failed to create {}: {}, exception: {}".format(
+                        _d, _dir, e)
+                    raise PipelineExc(msg)
 
     def print_module_settings(self):
         self.logger.info(self.module_settings)
@@ -91,9 +95,11 @@ class ModuleBase(object):
     def before_run(self):
         self.logger.info("")
         self.logger.info("- module: {}".format(self.name))
+        self.exit_status = "FAILED"
 
     def after_run(self):
         self.logger.info("- done: {}".format(self.name))
+        self.exit_status = "COMPLETED"
 
     def add_module_settings_to_saved_outputs_dict(self):
         for key in self.module_settings:
@@ -101,6 +107,7 @@ class ModuleBase(object):
 
     @abstractmethod
     def run(self):
+        """ need to be overriden in each subclass """
         pass
 
     def get_dataset_ref(self):
@@ -131,9 +138,3 @@ class ModuleBase(object):
 
     def post_fastas(self, fasta0, fasta1):
         self.db_api.set_fastas(fasta0, fasta1)
-
-    @staticmethod
-    def fail(msg, mod):
-        msg = "Invalid settings for module: {}, {}".format(mod, msg)
-        self.logger.error(msg)
-        sys.exit(1)

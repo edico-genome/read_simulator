@@ -51,10 +51,11 @@ def run_process(cmd, _logger, outfile=None):
             arguments,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
+    process.wait()
     output, error = process.communicate()
-    _logger.info(output)
+    _logger.debug(output)
     
-    if error:
+    if process.returncode:
         raise PipelineExc(error)
     return output
 
@@ -182,7 +183,6 @@ class CNV_WHG_ModFastas(CNV_Base):
 
         # truth files
         csv_files = ["deletions.csv", "insertions.csv", "tandemDuplications.csv"]
-
         self.create_and_submit_truth_tsv_and_vcf(csv_files)
 
         self.module_settings['target_bed'] = os.path.join(
@@ -240,7 +240,7 @@ class CNV_WHG_ModFastas(CNV_Base):
 
 
 ###########################################################
-class CNVExomeModFastas(ModuleBase):
+class CNVExomeModFastas(CNV_Base):
     default_settings = {}
     expected_settings = [
         "nHomozygousDeletions",
@@ -250,73 +250,14 @@ class CNVExomeModFastas(ModuleBase):
         "cnv_db", "target_bed"]
 
 
-    def get_refs(self):
-        self.get_dataset_ref()
-        for key in ["ref_type", "fasta_file"]:
-            if not self.module_settings[key]:
-                msg = "{}, dataset {} missing: {}".format(self.name, self.dataset_name, key)
-                raise PipelineExc(msg)
-
-    def add_contig_names_to_target_bed(self):
-        self.module_settings['target_bed_contigs_named'] = "{}_contigs_named".format(
-            self.module_settings['target_bed'])
-        self.pipeline_settings["lock"].acquire()
-        with open(self.module_settings['target_bed']) as stream_in, \
-             open(self.module_settings['target_bed_contigs_named'], 'w') as stream_out:
-            stream_out.write("contig\tstart\tstop\tname\n")
-            for idx, line in enumerate(stream_in):
-                new_line = "{}\ttarget-{}\n".format(line.replace("\n",""), idx+1)
-                stream_out.write(new_line)
-        self.logger.info("Wrote results to: {}".format(self.module_settings['target_bed_contigs_named']))
-        self.pipeline_settings["lock"].release()
-        
-
-    def remove_contig_name_descriptions(self):
-        """ the RSVSim tool fails when we use fastas with long contig names like 
-        >1 dna:chromosome chromosome:GRCh37:1:1:249250621:1 
-        this function strips the crud and copies the file to staging """
-
-        # only have one process create this file
-        self.pipeline_settings["lock"].acquire()
-        basename = os.path.basename(self.module_settings["fasta_file"])
-        new_fasta = os.path.join(self.module_settings["workdir"], "{}_mod".format(basename))
-
-        # look at first line to determine if we need to process
-        with open(self.module_settings["fasta_file"], 'r') as stream_in:
-            first_line = stream_in.readline().strip("\n")
-        if first_line.strip() == 1:
-            self.logger.info("Fasta file in expected format, no need to process")
-            return
-        
-        self.logger.info("Fasta file not in expected format, need to process")
-
-        if os.path.isfile(new_fasta):
-            self.logger.info("preprocessed fasta file ready for use by RSVSim")            
-        else:
-            self.logger.info("preprocessing fasta file for use by RSVSim")            
-            with open(self.module_settings["fasta_file"], 'r') as stream_in, \
-                 open(new_fasta, "w") as stream_out:
-                try:
-                    for line in stream_in:
-                        if line[0] == ">":
-                            line = "{}\n".format(line.split()[0])
-                        stream_out.write(line)
-                except:
-                    self.logger.error("Failed to preprocess fasta line: {}".format(e), exc_info=True)
-                    raise
-                    
-            cmd = "samtools faidx {}".format(new_fasta)
-            self.logger.info(cmd)
-            subprocess.check_call(cmd, shell=True)
-        self.pipeline_settings["lock"].release()
-        self.module_settings["fasta_file"] = new_fasta
-
 
     def run(self):
         self.get_refs()
         self.remove_contig_name_descriptions()
 
-        _mod_fastas_script = os.path.join(this_dir_path, "cnv_exomes", "RSVSim_generate_modified_genome.R")
+        # Gavin's script to create exome variants
+        _mod_fastas_script = os.path.join(this_dir_path,
+            "cnv_exomes", "RSVSim_generate_modified_genome.R")
 
         cmd =_mod_fastas_script
         cmd += " --nHomozygousDeletions {nHomozygousDeletions}"
@@ -331,33 +272,16 @@ class CNVExomeModFastas(ModuleBase):
             cmd += " --target_chrs {target_chrs}"
         cmd += " --target_bed {target_bed}"
         cmd = cmd.format(**self.module_settings)
-
-        try:
-            self.logger.info(cmd)
-            # subprocess.check_call(cmd, shell=True)
-        except Exception as e:
-            raise PipelineExc(e)
-
+        run_process(cmd, self.logger)
 
         # create truth
-        csv_files = ["insertions1.csv",
-                     "insertions2.csv",
-                     "deletions1.csv",
-                     "deletions2.csv",
-                     "tandemDuplications1.csv",    
-                     "tandemDuplications2.csv"]
-        csv_files = [os.path.join(self.module_settings["outdir"], csv) for csv in csv_files]
-        
-        for f in csv_files:
-            assert os.path.isfile(f), "file does not exist"
+        csv_files = [
+            "insertions1.csv", "insertions2.csv",
+            "deletions1.csv", "deletions2.csv",
+            "tandemDuplications1.csv", "tandemDuplications2.csv"
+            ]
+        self.create_and_submit_truth_tsv_and_vcf(csv_files)
 
-        try:
-            truth_vcf, truth_tsv = create_truth_vcf.create_truth_files(
-                self.module_settings["fasta_file"],
-                self.module_settings['outdir'], csv_files)
-        except Exception as e:
-            self.logger.error("Failed to create truth files: {}".format(e), exc_info=True)
-            raise PipelineExc()
 
         # get modified fasta files
         fastas = {"contig-1": "{outdir}/genome_rearranged1.fasta".format(**self.module_settings),
@@ -400,17 +324,10 @@ class Capsim(ModuleBase):
             " -f {fragment-size}" + \
             " -o {outdir}" + \
             " -1 {fasta0} -2 {fasta1}"
-
         cmd = cmd.format(**self.module_settings)
+        run_command(cmd, self.logger)
 
-        self.logger.info("Capsim cmd: {}".format(cmd))
-        try:
-            subprocess.check_output(cmd, shell=True)
-        except Exception() as e:
-            logging.error('Error message %s' % e)
-            raise
-
-        # update results
+        # update db with results
         self.logger.info('find the Capsim generated FQs and upload to DB')
         fq_lists = []
         for i in ["1", "2"]:
