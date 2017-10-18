@@ -74,11 +74,13 @@ class PipelinesBase(object):
                 msg = "Pipeline Failed: {}; reason: {}.\n\nContinue with next pipeline ..."
                 msg = msg.format(self.name, e)
                 self.exit_status = "FAILED"
-          	raise PipelineExc(msg)
+                logger.error("Pipeline failed: {}".format(self.name), exc_info=True)
+          	raise PipelineExc()
             except Exception as e:
                 msg = "Pipeline Failed: {}; reason: {}.\n\nContinue with next pipeline ..."
                 msg = msg.format(self.name, e)
                 self.exit_status = "FAILED"
-          	raise PipelineExc(msg)
+                logger.error("Pipeline failed: {}".format(self.name), exc_info=True)
+          	raise PipelineExc()
             inst.logger.removeHandler(fh)      
         logger.removeHandler(fh)

@@ -68,7 +68,7 @@ def run_this_pipeline(_pipeline):
 
 
 def run_pipelines(pipelines):
-    MAX_PROCESSES = 10
+    MAX_PROCESSES = 5
 
     logger.info("\nRUNNING PIPELINES\n")    
     processes = []

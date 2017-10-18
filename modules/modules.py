@@ -12,17 +12,231 @@ from lib.common import PipelineExc
 from enum import Enum
 from vlrd import vlrd_functions
 from cnv_exomes import create_truth_vcf
+import pdb
 
 this_dir_path = os.path.dirname(os.path.realpath(__file__))
 
 
 ###########################################################
-def check_output(cmd):
+class ForkedPdb(pdb.Pdb):
+    """A Pdb subclass that may be used
+    from a forked multiprocessing child
+
+    """
+    def interaction(self, *args, **kwargs):
+        _stdin = sys.stdin
+        try:
+            sys.stdin = open('/dev/stdin')
+            pdb.Pdb.interaction(self, *args, **kwargs)
+        finally:
+            sys.stdin = _stdin
+
+
+###########################################################
+def run_process(cmd, _logger, outfile=None):
     """ helper function to run cmd """
-    self.logger.info("Run cmd: {}".format(cmd))
-    res = subprocess.check_output(cmd, shell=True)
-    self.logger.info("Response: {}".format(res))
-    return res
+    _logger.info("Run cmd: {}".format(cmd))
+
+    if not isinstance(cmd, list):
+        cmd = cmd.split()
+    arguments = cmd
+
+    if outfile:
+        with open(outfile, 'w') as f:
+            process = subprocess.Popen(
+                arguments,
+                stdout=f)
+    else:
+        process = subprocess.Popen(
+            arguments,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+    output, error = process.communicate()
+    _logger.info(output)
+    
+    if error:
+        raise PipelineExc(error)
+    return output
+
+
+###########################################################
+class CNV_Base(ModuleBase):
+    default_settings = {}
+    expected_settings = [
+        "nHomozygousDeletions",
+        "nHeterozygousDeletions",
+        "nTandemDuplications", 
+        "outdir", "workdir", 
+        "target_chrs"]
+
+    def get_refs(self):
+        self.get_dataset_ref()
+        for key in ["ref_type", "fasta_file"]:
+            if not self.module_settings[key]:
+                msg = "{}, dataset {} missing: {}".format(self.name, self.dataset_name, key)
+                raise PipelineExc(msg)
+
+    def add_contig_names_to_target_bed(self):
+        self.module_settings['target_bed_contigs_named'] = "{}_contigs_named".format(
+            self.module_settings['target_bed'])
+        self.pipeline_settings["lock"].acquire()
+        with open(self.module_settings['target_bed']) as stream_in, \
+             open(self.module_settings['target_bed_contigs_named'], 'w') as stream_out:
+            stream_out.write("contig\tstart\tstop\tname\n")
+            for idx, line in enumerate(stream_in):
+                new_line = "{}\ttarget-{}\n".format(line.replace("\n",""), idx+1)
+                stream_out.write(new_line)
+        self.logger.info("Wrote results to: {}".format(self.module_settings['target_bed_contigs_named']))
+        self.pipeline_settings["lock"].release()
+        
+
+    def remove_contig_name_descriptions(self):
+        """ the RSVSim tool fails when we use fastas with long contig names like 
+        >1 dna:chromosome chromosome:GRCh37:1:1:249250621:1 
+        this function strips the crud and copies the file to staging """
+
+        # only have one process create this file
+        self.pipeline_settings["lock"].acquire()
+        basename = os.path.basename(self.module_settings["fasta_file"])
+        new_fasta = os.path.join(self.module_settings["workdir"], "{}_mod".format(basename))
+
+        # look at first line to determine if we need to process
+        with open(self.module_settings["fasta_file"], 'r') as stream_in:
+            first_line = stream_in.readline().strip("\n")
+        if len(first_line.split()) == 1:
+            self.logger.info("Fasta file in expected format, no need to process")
+            self.pipeline_settings["lock"].release()
+            return
+        
+        self.logger.info("Fasta file not in expected format, need to process")
+        self.logger.info("First line: {}".format(first_line))
+
+        if os.path.isfile(new_fasta):
+            self.logger.info("preprocessed fasta file ready for use by RSVSim")            
+        else:
+            self.logger.info("preprocessing fasta file for use by RSVSim")            
+            with open(self.module_settings["fasta_file"], 'r') as stream_in, \
+                 open(new_fasta, "w") as stream_out:
+                try:
+                    for line in stream_in:
+                        if line[0] == ">":
+                            line = "{}\n".format(line.split()[0])
+                        stream_out.write(line)
+                except:
+                    self.logger.error("Failed to preprocess fasta line: {}".format(e), exc_info=True)
+                    raise
+                    
+            cmd = "samtools faidx {}".format(new_fasta)
+            self.logger.info(cmd)
+            subprocess.check_call(cmd, shell=True)
+        self.pipeline_settings["lock"].release()
+        self.module_settings["fasta_file"] = new_fasta
+
+
+    def create_and_submit_truth_tsv_and_vcf(self, csv_files):
+        """ create truth files """
+
+        csv_files = [os.path.join(self.module_settings["outdir"], csv) for csv in csv_files]
+        
+        for f in csv_files:
+            assert os.path.isfile(f), "file: {} does not exist".format(f)
+
+        try:
+            truth_vcf, truth_tsv = create_truth_vcf.create_truth_files(
+                self.module_settings["fasta_file"],
+                self.module_settings['outdir'], csv_files)
+        except Exception as e:
+            self.logger.error("Failed to create truth files: {}".format(e), exc_info=True)
+            raise PipelineExc()
+
+        # update db
+        self.module_settings['cnv_truth'] = truth_tsv
+        self.module_settings['truth_set_vcf'] = truth_vcf
+
+        self.db_api.upload_to_db('cnv_truth', truth_tsv)
+        self.db_api.upload_to_db('truth_set_vcf', truth_vcf)
+
+
+###########################################################
+class CNV_WHG_ModFastas(CNV_Base):
+    expected_settings = [
+        "size_ins", "size_dels", "size_dups", 
+        "outdir", "workdir", "target_chrs"]
+
+    def run(self):
+        self.get_refs()
+        self.remove_contig_name_descriptions()
+
+        _mod_fastas_script = os.path.join(this_dir_path, "cnv_whg", "RSVSim_generate_cnv.R")
+
+        # create Fastas
+        # Rscript $cnvsimultoolsdir/RSVSim_generate_cnv.R $chrom $gencnvdir $sizeins $sizedel $sizedup
+        cmd = _mod_fastas_script
+        cmd += " {target_chrs}"
+        cmd += " {outdir}"
+        cmd += " {size_ins}"
+        cmd += " {size_dels}"
+        cmd += " {size_dups}"
+        cmd = cmd.format(**self.module_settings)
+        run_process(cmd, self.logger)
+
+        # truth files
+        csv_files = ["deletions.csv", "insertions.csv", "tandemDuplications.csv"]
+
+        self.create_and_submit_truth_tsv_and_vcf(csv_files)
+
+        self.module_settings['target_bed'] = os.path.join(
+            self.module_settings["outdir"], "target.bed")
+        
+        chrom = os.path.join(self.module_settings["outdir"], "chrom.txt")
+        with open(self.module_settings['target_bed'], 'w') as stream_out:
+            stream_out.write("{}\n".format(self.module_settings["target_chrs"]))
+
+        # create single chromosomes fasta
+        small_fasta = os.path.join(self.module_settings["outdir"], "chrom.fa")    
+
+        """
+        faSomeRecords = os.path.join(this_dir_path, "cnv_whg", "faSomeRecords")
+        cmd = [faSomeRecords, self.module_settings["fasta_file"],
+               self.module_settings['target_bed'], small_fasta]
+        run_process(" ".join(cmd), self.logger)
+        """
+       
+        cmd = ["samtools", "faidx",
+               self.module_settings["fasta_file"], 
+               self.module_settings["target_chrs"]]
+        run_process(" ".join(cmd), self.logger, small_fasta)
+
+        # modify the two fastas
+        cmd_template = "bcftools consensus -c {liftover} -H {haplotype} " + \
+                       "-f {small_fasta} {truth_vcf}"
+
+        # mod fasta 0
+        mod_fasta_0 = os.path.join(
+            self.module_settings["outdir"], "mod_fasta_0.fa")
+        options = {
+            "liftover": os.path.join(
+                self.module_settings["outdir"], "liftover_0.txt"),
+            "haplotype": 1, 
+            "small_fasta": small_fasta,
+            "truth_vcf": self.module_settings['truth_set_vcf']}
+        cmd = cmd_template.format(**options)
+        run_process(cmd, self.logger, mod_fasta_0)
+
+        # mod fasta 1
+        mod_fasta_1 = os.path.join(
+            self.module_settings["outdir"], "mod_fasta_1.fa")
+        options = {
+            "liftover": os.path.join(
+                self.module_settings["outdir"], "liftover_1.txt"),
+            "haplotype": 2, 
+            "small_fasta": small_fasta,
+            "truth_vcf": self.module_settings['truth_set_vcf']}
+        cmd = cmd_template.format(**options)
+        run_process(cmd, self.logger, mod_fasta_1)
+
+        # update db with results
+        self.db_api.set_fastas(mod_fasta_0, mod_fasta_1)
 
 
 ###########################################################
@@ -53,7 +267,7 @@ class CNVExomeModFastas(ModuleBase):
             for idx, line in enumerate(stream_in):
                 new_line = "{}\ttarget-{}\n".format(line.replace("\n",""), idx+1)
                 stream_out.write(new_line)
-        print("Wrote results to: {}".format(self.module_settings['target_bed_contigs_named']))
+        self.logger.info("Wrote results to: {}".format(self.module_settings['target_bed_contigs_named']))
         self.pipeline_settings["lock"].release()
         
 
@@ -67,10 +281,19 @@ class CNVExomeModFastas(ModuleBase):
         basename = os.path.basename(self.module_settings["fasta_file"])
         new_fasta = os.path.join(self.module_settings["workdir"], "{}_mod".format(basename))
 
+        # look at first line to determine if we need to process
+        with open(self.module_settings["fasta_file"], 'r') as stream_in:
+            first_line = stream_in.readline().strip("\n")
+        if first_line.strip() == 1:
+            self.logger.info("Fasta file in expected format, no need to process")
+            return
+        
+        self.logger.info("Fasta file not in expected format, need to process")
+
         if os.path.isfile(new_fasta):
-            print("preprocessed fasta file ready for use by RSVSim")            
+            self.logger.info("preprocessed fasta file ready for use by RSVSim")            
         else:
-            print("preprocessing fasta file for use by RSVSim")            
+            self.logger.info("preprocessing fasta file for use by RSVSim")            
             with open(self.module_settings["fasta_file"], 'r') as stream_in, \
                  open(new_fasta, "w") as stream_out:
                 try:
@@ -79,11 +302,11 @@ class CNVExomeModFastas(ModuleBase):
                             line = "{}\n".format(line.split()[0])
                         stream_out.write(line)
                 except:
-                    logger.error("Failed to preprocess fasta line: {}".format(e), exc_info=True)
+                    self.logger.error("Failed to preprocess fasta line: {}".format(e), exc_info=True)
                     raise
                     
             cmd = "samtools faidx {}".format(new_fasta)
-            logger.info(cmd)
+            self.logger.info(cmd)
             subprocess.check_call(cmd, shell=True)
         self.pipeline_settings["lock"].release()
         self.module_settings["fasta_file"] = new_fasta
@@ -110,8 +333,8 @@ class CNVExomeModFastas(ModuleBase):
         cmd = cmd.format(**self.module_settings)
 
         try:
-            logger.info(cmd)
-            subprocess.check_call(cmd, shell=True)
+            self.logger.info(cmd)
+            # subprocess.check_call(cmd, shell=True)
         except Exception as e:
             raise PipelineExc(e)
 
@@ -133,7 +356,7 @@ class CNVExomeModFastas(ModuleBase):
                 self.module_settings["fasta_file"],
                 self.module_settings['outdir'], csv_files)
         except Exception as e:
-            logger.error("Failed to create truth files: {}".format(e), exc_info=True)
+            self.logger.error("Failed to create truth files: {}".format(e), exc_info=True)
             raise PipelineExc()
 
         # get modified fasta files
@@ -143,7 +366,8 @@ class CNVExomeModFastas(ModuleBase):
         # update db with results
         # dragen CVN require contig names
         self.add_contig_names_to_target_bed()
-        logger.info("renamed target bed: {}".format(self.module_settings['target_bed_contigs_named']))
+        self.logger.info("renamed target bed: {}".format(
+            self.module_settings['target_bed_contigs_named']))
         self.db_api.upload_to_db('cnv_target_bed', self.module_settings['target_bed_contigs_named'])
         self.db_api.upload_to_db('cnv_truth', truth_tsv)
         self.db_api.upload_to_db('truth_set_vcf', truth_vcf)
@@ -165,7 +389,7 @@ class Capsim(ModuleBase):
             raise PipelineExc('Capsim is missing a required modified Fasta: {}'.format(e))
 
         # run
-        logger.info('Capsim: simulating reads ...')
+        self.logger.info('Capsim: simulating reads ...')
         script_path = os.path.join(this_dir_path, "cnv_exomes", "run_capsim.sh")
         log = os.path.join(self.module_settings['outdir'], "capsim.log")
         self.module_settings['capsim_log'] = log
@@ -179,7 +403,7 @@ class Capsim(ModuleBase):
 
         cmd = cmd.format(**self.module_settings)
 
-        logger.info("Capsim cmd: {}".format(cmd))
+        self.logger.info("Capsim cmd: {}".format(cmd))
         try:
             subprocess.check_output(cmd, shell=True)
         except Exception() as e:
@@ -187,7 +411,7 @@ class Capsim(ModuleBase):
             raise
 
         # update results
-        logger.info('find the Capsim generated FQs and upload to DB')
+        self.logger.info('find the Capsim generated FQs and upload to DB')
         fq_lists = []
         for i in ["1", "2"]:
             p = os.path.join(self.module_settings["outdir"], 'output_' + i + '.fastq.gz')

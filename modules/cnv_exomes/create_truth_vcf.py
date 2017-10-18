@@ -14,10 +14,8 @@ rsv_script = os.path.join(script_dir, "unified_rsv_table.sh")
 to_vcf_script = os.path.join(script_dir, "RSVSim_to_VCF.pl")
 vcf_to_truth_table_script = os.path.join(script_dir, "rsvsim.vcf_to_cnv_truth_table.pl")
 
-header = "##fileformat=VCFv4.2\n"
-header += "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE\n"
-
 def run_cmd(cmd):
+    logging.info(cmd)
     subprocess.check_output(cmd, shell=True)
 
 def get_order_file(fasta, outdir):
@@ -52,9 +50,10 @@ def create_truth_files(fasta, outdir, csv_files):
     run_cmd(cmd)
 
     vcf = os.path.join(outdir, "RSVSim_truth.vcf")
-    cmd = "echo {} > {}"
-    cmd = cmd.format(header, vcf)
-    run_cmd(cmd)
+    vcf_gz = os.path.join(outdir, "RSVSim_truth.vcf.gz")
+    with open(vcf, 'w') as stream:
+        stream.write("##fileformat=VCFv4.2\n")
+        stream.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE\n")
 
     cmd = "{} {} {} | sortBed -i /dev/stdin -faidx {} >> {}"
     cmd = cmd.format(to_vcf_script, normalized, fasta, order_file, vcf)
@@ -66,4 +65,11 @@ def create_truth_files(fasta, outdir, csv_files):
     run_cmd(cmd)
     logger.info("TSV Truth: {}".format(tsv))
 
-    return vcf, tsv
+    # compress for bcftools
+    cmd = "bgzip -c {} > {}".format(vcf, vcf_gz)
+    run_cmd(cmd)
+
+    cmd = "tabix {}".format(vcf_gz)
+    run_cmd(cmd)
+
+    return vcf_gz, tsv
