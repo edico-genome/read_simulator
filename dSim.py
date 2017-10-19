@@ -51,7 +51,7 @@ def instantiate_pipelines():
             # class factory and instantiate pipeline object
             Pipeline = pipeline_factory(pipeline_settings["pipeline_name"])
             p = Pipeline(pipeline_settings, idx)
-
+            
             # give each pipeline an idependent logger
             log_name = "dSim_{}".format(p.pipeline_settings["dataset_name"])
             log_path = os.path.join(p.pipeline_settings["outdir"],
@@ -89,14 +89,17 @@ def run_this_pipeline(_pipeline):
 
 
 def run_pipelines(pipelines):
+
     # run processes in parallel
     MAX_PROCESSES = 5
     logger.info("\nRUNNING PIPELINES\n")    
     processes = []
     for pipeline in pipelines:
+
         p = Process(target=run_this_pipeline, args=(pipeline,))
         p.start()
         processes.append(p)
+
         if len(processes) == MAX_PROCESSES:
             for p in processes: p.join()
             processes = []

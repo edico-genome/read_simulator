@@ -9,8 +9,8 @@ library(optparse)
 
 print(packageVersion("RSVSim"))
 
-if(packageVersion("RSVSim") < "1.16.0") {
-    stop("Need RSVSim 1.16.0")
+if(packageVersion("RSVSim") < "1.17.0") {
+    stop("Need RSVSim 1.17.0")
 }
 
 
@@ -157,8 +157,8 @@ while(foundOverlaps){
     		            replace=FALSE)
     heteroDels = sort(cnv_db[hetero_indices,])
     cnv_db = cnv_db[-hetero_indices,]
-    foundOverlaps=(sum(countOverlaps(homoDels, heteroDels)>0) ||
-    		   length(findOverlaps(heteroDels, ignoreSelf=TRUE))>0)
+    foundOverlaps_tmp = length(findOverlaps(heteroDels, ignoreSelf=TRUE))>0
+    foundOverlaps=(sum(countOverlaps(homoDels, heteroDels)>0) || foundOverlaps_tmp)
     cat("Found overlaps", foundOverlaps,"\n")
 }
 

@@ -71,8 +71,14 @@ echo "=============================="
 #####################################################
 function run {
     cmd=$1
-    echo $cmd
+    echo "Run cmd: $cmd"
     $cmd
+    
+    ret_val=$?
+    if [[ $ret_val -ne 0 ]]; then
+        echo "Cmd had a non-zero return value: $ret_val"
+	exit 1
+    fi
 }
 
 #####################################################

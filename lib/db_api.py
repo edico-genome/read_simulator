@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 class DBAPI(object):
     def __init__(self, dataset_name):
         self.dataset_name = dataset_name
-        self.outputs_dict = {}
 
 
     ###################################
@@ -54,26 +53,8 @@ class DBAPI(object):
                 sys.exit(1)
         return bed
 
-    def get_fastas(self):
-        fasta0 = self.outputs_dict.get('fasta0')
-        fasta1 = self.outputs_dict.get('fasta1')
-        for idx, f in enumerate([fasta0, fasta1]):
-            if f and os.path.isfile(f):
-                logger.info("Detected fasta file: {}".format(f))
-            else:
-                raise Exception("Did not find Fasta {}: {}".format(idx, f))
-        return {'fasta0': fasta0, 'fasta1': fasta1}
-
     ###################################
     # UPLOAD METHODS
-    def set_fastas(self, fasta0, fasta1):
-        for f in [fasta0, fasta1]:
-            # continue
-            if not os.path.isfile(f):
-                raise Exception("Not a valid fasta: {}".format(f))
-        self.outputs_dict['fasta0'] = fasta0
-        self.outputs_dict['fasta1'] = fasta1
-
     def upload_to_db(self, key_name, value):
         """ this dataset must already exist """
         url = "http://data.edicogenome.com/api/set"

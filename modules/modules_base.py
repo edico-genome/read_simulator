@@ -2,9 +2,7 @@
 A module defines a unit of work ( creating a truth VCF/ fasta etc )
 """
 
-import os
-import sys
-import logging
+import os, sys, logging, copy
 from lib.common import PipelineExc, parse_ht_config
 from abc import ABCMeta, abstractmethod, abstractproperty
 
@@ -53,7 +51,7 @@ class ModuleBase(object):
         if a settings is available in pipeline settings then override
         assert if setting is never specified
         """
-        self.module_settings = self.default_settings
+        self.module_settings = copy.deepcopy(self.default_settings)
         for key in self.expected_settings:
             if key in self.pipeline_settings:
                 self.module_settings[key] = self.pipeline_settings[key]

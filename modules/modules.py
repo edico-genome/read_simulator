@@ -56,7 +56,7 @@ def run_process(cmd, _logger, outfile=None):
     _logger.debug(output)
     
     if process.returncode:
-        raise PipelineExc(error)
+        raise PipelineExc("bash cmd failed: {}".format(error))
     return output
 
 
@@ -99,7 +99,7 @@ class CNV_Base(ModuleBase):
         # only have one process create this file
         self.pipeline_settings["lock"].acquire()
         basename = os.path.basename(self.module_settings["fasta_file"])
-        new_fasta = os.path.join(self.module_settings["workdir"], "{}_mod".format(basename))
+        new_fasta = os.path.join(self.module_settings["shared_dir"], "{}_mod".format(basename))
 
         # look at first line to determine if we need to process
         with open(self.module_settings["fasta_file"], 'r') as stream_in:
@@ -109,13 +109,13 @@ class CNV_Base(ModuleBase):
             self.pipeline_settings["lock"].release()
             return
         
-        self.logger.info("Fasta file not in expected format, need to process")
-        self.logger.info("First line: {}".format(first_line))
+        self.logger.info("Fasta file first line: {}".format(first_line))
+        self.logger.info("Fasta file not in expected format")
 
         if os.path.isfile(new_fasta):
-            self.logger.info("preprocessed fasta file ready for use by RSVSim")            
+            self.logger.info("Fasta previously preprocessed and available for use by RSVSim")
         else:
-            self.logger.info("preprocessing fasta file for use by RSVSim")            
+            self.logger.info("Preprocessing fasta file for use by RSVSim")            
             with open(self.module_settings["fasta_file"], 'r') as stream_in, \
                  open(new_fasta, "w") as stream_out:
                 try:
@@ -124,7 +124,8 @@ class CNV_Base(ModuleBase):
                             line = "{}\n".format(line.split()[0])
                         stream_out.write(line)
                 except:
-                    self.logger.error("Failed to preprocess fasta line: {}".format(e), exc_info=True)
+                    self.logger.error(
+                        "Failed to preprocess fasta line: {}".format(line), exc_info=True)
                     raise
                     
             cmd = "samtools faidx {}".format(new_fasta)
@@ -162,7 +163,7 @@ class CNV_Base(ModuleBase):
 class CNV_WHG_ModFastas(CNV_Base):
     expected_settings = [
         "size_ins", "size_dels", "size_dups", 
-        "outdir", "workdir", "target_chrs"]
+        "outdir", "workdir", "target_chrs", "shared_dir"]
 
     def run(self):
         self.get_refs()
@@ -236,7 +237,8 @@ class CNV_WHG_ModFastas(CNV_Base):
         run_process(cmd, self.logger, mod_fasta_1)
 
         # update db with results
-        self.db_api.set_fastas(mod_fasta_0, mod_fasta_1)
+        self.pipeline_settings["mod_fasta_0"] = mod_fasta_0
+        self.pipeline_settings["mod_fasta_1"] = mod_fasta_1
 
 
 ###########################################################
@@ -247,9 +249,7 @@ class CNVExomeModFastas(CNV_Base):
         "nHeterozygousDeletions",
         "nTandemDuplications", "maxEventLength",
         "minEventLength", "outdir", "workdir",
-        "cnv_db", "target_bed"]
-
-
+        "cnv_db", "target_bed", "shared_dir"]
 
     def run(self):
         self.get_refs()
@@ -287,15 +287,15 @@ class CNVExomeModFastas(CNV_Base):
         fastas = {"contig-1": "{outdir}/genome_rearranged1.fasta".format(**self.module_settings),
                   "contig-2": "{outdir}/genome_rearranged2.fasta".format(**self.module_settings)}
 
-        # update db with results
-        # dragen CVN require contig names
+        self.pipeline_settings["mod_fasta_0"] = fastas["contig-1"]
+        self.pipeline_settings["mod_fasta_1"] = fastas["contig-2"]
+
+
+        # update target bed
         self.add_contig_names_to_target_bed()
         self.logger.info("renamed target bed: {}".format(
             self.module_settings['target_bed_contigs_named']))
         self.db_api.upload_to_db('cnv_target_bed', self.module_settings['target_bed_contigs_named'])
-        self.db_api.upload_to_db('cnv_truth', truth_tsv)
-        self.db_api.upload_to_db('truth_set_vcf', truth_vcf)
-        self.db_api.set_fastas(fastas["contig-1"], fastas["contig-2"])
 
 
 ###########################################################
@@ -304,11 +304,10 @@ class Capsim(ModuleBase):
     expected_settings = ["number-of-reads", "read-len", "fragment-size"]
 
     def run(self):
-        # get modified fastas
         try:
-            rv = self.db_api.get_fastas()
-            for f in ['fasta0', 'fasta1']:
-                self.module_settings[f] = rv[f]
+            for i in ["mod_fasta_0", "mod_fasta_1"]:
+                assert os.path.isfile(self.pipeline_settings[i])
+                self.module_settings[i] = self.pipeline_settings[i]
         except Exception as e:
             raise PipelineExc('Capsim is missing a required modified Fasta: {}'.format(e))
 
@@ -323,9 +322,9 @@ class Capsim(ModuleBase):
             " -l {read-len}" + \
             " -f {fragment-size}" + \
             " -o {outdir}" + \
-            " -1 {fasta0} -2 {fasta1}"
+            " -1 {mod_fasta_0} -2 {mod_fasta_1}"
         cmd = cmd.format(**self.module_settings)
-        run_command(cmd, self.logger)
+        run_process(cmd, self.logger)
 
         # update db with results
         self.logger.info('find the Capsim generated FQs and upload to DB')
@@ -354,7 +353,8 @@ class VLRDVCF(ModuleBase):
         self.get_refs()
         res = vlrd_functions.create_truth_vcf_and_fastas(self.module_settings)
         self.logger.info(res)
-        self.db_api.set_fastas(res['fasta0'], res['fasta1'])
+        self.pipeline_settings["mod_fasta_0"] = res['fasta0'] 
+        self.pipeline_settings["mod_fasta_1"] = res['fasta1']
         self.db_api.post_truth_vcf(res['truth_vcf'])
 
 
@@ -508,7 +508,9 @@ class AltContigVCF(ModuleBase):
                              fastas[c])
             check_call()
 
-        self.db_api.set_fastas(fastas["contig-1"], fastas["contig-2"])
+        self.pipeline_settings["mod_fasta_0"] = fastas["contig-1"]
+        self.pipeline_settings["mod_fasta_1"] = fastas["contig-2"]
+
 
     def create_truth_vcf(self):
         script_path = os.path.join(this_dir_path, "alt_contig", "fasta_sam_to_vcf.pl")
@@ -543,13 +545,11 @@ class Pirs(ModuleBase):
 
     def run(self):
         try:
-            rv = self.db_api.get_fastas()
-            for fa in ['fasta0', 'fasta1']:
-                self.module_settings[fa] = rv[fa]
+            for i in ["mod_fasta_0", "mod_fasta_1"]:
+                assert os.path.isfile(self.pipeline_settings[i])
+                self.module_settings[i] = self.pipeline_settings[i]
         except Exception as e:
-            self.logger.error('Pirs is missing a required modified Fasta')
-            self.logger.error("Exception: {}".format(e))
-            sys.exit(1)
+            raise PipelineExc('Pirs is missing a required modified Fasta')
 
         # run
         self.logger.info('Pirs: simulating reads ...')
@@ -564,7 +564,7 @@ class Pirs(ModuleBase):
               " --indel-error-profile={indels}" + \
               " --gc-bias-profile={gcdep}" + \
               " --phred-offset=33 --no-gc-bias -c gzip " + \
-              " -t 48 {fasta0} {fasta1} " + \
+              " -t 48 {mod_fasta_0} {mod_fasta_1} " + \
               " --no-indel-errors &> {pirs_log}"
 
         cmd = cmd.format(**self.module_settings)
