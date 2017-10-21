@@ -16,3 +16,6 @@ class CNV_WHGs(PipelinesBase):
 
 class NoVarPirs(PipelinesBase):
     modules = [SamtoolsFaidx, Pirs]
+
+class Test(PipelinesBase):
+    modules = [TestMod]

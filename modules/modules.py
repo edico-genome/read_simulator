@@ -12,24 +12,9 @@ from lib.common import PipelineExc
 from enum import Enum
 from vlrd import vlrd_functions
 from cnv_exomes import create_truth_vcf
-import pdb
+
 
 this_dir_path = os.path.dirname(os.path.realpath(__file__))
-
-
-###########################################################
-class ForkedPdb(pdb.Pdb):
-    """A Pdb subclass that may be used
-    from a forked multiprocessing child
-
-    """
-    def interaction(self, *args, **kwargs):
-        _stdin = sys.stdin
-        try:
-            sys.stdin = open('/dev/stdin')
-            pdb.Pdb.interaction(self, *args, **kwargs)
-        finally:
-            sys.stdin = _stdin
 
 
 ###########################################################
@@ -679,6 +664,15 @@ class SamtoolsFaidx(ModuleBase):
         self.create_truth_vcf()
 
 
+
+###########################################################
+class TestMod(ModuleBase):
+    default_settings = {}
+    expected_settings = ["test"]
+
+    def run(self):
+        self.pipeline_settings["test"] = "test"
+        self.test = "test2"
 
 
 ###########################################################

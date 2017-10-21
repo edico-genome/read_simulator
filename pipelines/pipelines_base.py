@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractproperty
 from lib.db_api import DBAPI
-from lib.common import PipelineExc
+from lib.common import PipelineExc, MPdb
 import logging, sys, os, copy
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,6 @@ class PipelinesBase(object):
         self.db_api.dataset_create_or_update(
             self.pipeline_settings["dataset_name"],
             self.pipeline_settings["reference"])
-        self.exit_status = "CONSTRUCTED"
 
 
     def validate_pipeline_settings(self, settings):
@@ -42,8 +41,7 @@ class PipelinesBase(object):
         self.pipeline_settings = copy.deepcopy(settings)
 
         # required settings for each pipeline
-        expected = [
-            "outdir", "workdir", "dataset_name", "reference"] 
+        expected = ["outdir", "workdir", "dataset_name", "reference"] 
 
         for i in expected:
             if not i in self.pipeline_settings:
@@ -53,7 +51,6 @@ class PipelinesBase(object):
         """ 
         create subdirs for each dataset
         """
-        # import pdb; pdb.set_trace()
 
         if self.pipeline_idx > 0:
             self.pipeline_settings["dataset_name"] += "_{}".format(self.pipeline_idx) 
@@ -98,24 +95,25 @@ class PipelinesBase(object):
 
     def run(self):
         self.logger.info("\nPIPELINE: {}".format(self.name))
-        self.exit_status = "STARTED RUN"
         for inst in self.module_instances:
             try:     
+                state = "STARTED"
                 inst.before_run()
                 inst.run()
                 inst.after_run()
+                state = "COMPLETED"
             except PipelineExc:
                 msg = "Handled Exception: {}\nContinue with next pipeline ..."
                 msg = msg.format(self.name)
                 self.logger.error(msg, exc_info=True)        
-                self.exit_status = "FAILED"
-          	raise
+                self.exit_status = {"STATUS": "FAILED"}
+                state = "FAILED"
             except Exception:
                 msg = "Unexpected Exception: {}\nContinue with next pipeline ..."
                 msg = msg.format(self.name)
                 self.logger.error(msg, exc_info=True)
-                self.exit_status = "FAILED"
-          	raise
-        self.exit_status = "COMPLETED"
-        self.logger.info("Update exit status to completed")
-
+                self.exit_status = {"STATUS": "FAILED"}
+                state = "FAILED"
+            finally: 
+                return state
+        

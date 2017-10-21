@@ -5,8 +5,8 @@ import sys, copy, argparse, os
 from lib import sim_logger
 from lib.settings import Settings
 from pipelines import pipelines
-from lib.common import PipelineExc
-from multiprocessing import Lock, Process
+from lib.common import PipelineExc, MPdb
+from multiprocessing import Lock, Process, Queue
 import logging
 
 # logger will be used for simulator level logging
@@ -29,7 +29,7 @@ def pipeline_factory(pipeline_name):
     return ThisPipelineClass
 
 
-def instantiate_pipelines():
+def instantiate_pipelines(settings):
     """
     instantiate pipelines and validate pipeline settings
     """
@@ -81,58 +81,44 @@ def instantiate_pipelines():
             pipelines.append(p)
     return pipelines
 
-
-def run_this_pipeline(_pipeline):
-    try:
-        _pipeline.run()
-    except PipelineExc as e:
-        logger.error("Pipeline failed: {}".format(e), exc_info=True) 
-        raise
-    except Exception as e:
-        logger.error("Unknown fatal error: {}".format(e), exc_info=True)
-        raise
-
+def run_this_pipeline(p, result_queue):
+    state = p.run()
+    result_queue.put((p.name, state))
 
 def run_pipelines(pipelines):
-
     # run processes in parallel
+    result_queue = Queue()
     MAX_PROCESSES = 5
     logger.info("\nRUNNING PIPELINES\n")    
     processes = []
     for pipeline in pipelines:
-
-        p = Process(target=run_this_pipeline, args=(pipeline,))
+        p = Process(target=run_this_pipeline, args=(pipeline, result_queue))
         p.start()
         processes.append(p)
-
         if len(processes) == MAX_PROCESSES:
             for p in processes: p.join()
             processes = []
-    for p in processes: p.join()
+    if processes:
+        for p in processes: p.join()
 
-
-def print_summary(pipelines):
-    # print summary
-    logger.info("\nSIMULATOR SUMMARY\n")
+    logger.info("\nSIMULATOR PIPELINE EXIST STATES\n")
+    exit_sig = 0
     for pipeline in pipelines:
-        logger.info("{} {} {}".format(
-                pipeline.name,
-                pipeline.dataset_name,
-                pipeline.exit_status))
-        if pipeline.exit_status != "COMPLETED":
-            for m in pipeline.module_instances:
-                logger.info(" - {} {}".format(
-                        m.name,
-                        pipeline.exit_status))
-        
+        rv = result_queue.get()
+        print("- {} {}".format(rv[0], rv[1]))
+        if rv[1] != "COMPLETED":
+            exit_sig = 1
+            print "GGGGR"
+            print rv
+    return exit_sig
+    
 
 ############################################################
 # main
-def main():
-    pipelines_to_run = instantiate_pipelines()
-    run_pipelines(pipelines_to_run)
-    print_summary(pipelines_to_run)
-
+def main(settings):
+    pipelines_to_run = instantiate_pipelines(settings)
+    return run_pipelines(pipelines_to_run)
+    
 
 ############################################################
 if __name__ == '__main__':
@@ -145,5 +131,6 @@ if __name__ == '__main__':
     logger.info("\nINPUT SETTINGS\n")
     settings = Settings(args.run_settings)
     settings.print_settings()
-    main()
+    main(settings)
+
 

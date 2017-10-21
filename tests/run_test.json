@@ -1,0 +1,13 @@
+[
+  {
+    "num_runs": 1,
+    "start_idx": 0,
+    "pipeline_name": "Test",
+    "dataset_name": "cnv_whg_no_vars_sim",
+    "reference": "hg19",
+    "outdir": "/mnt/archive/sim_data/dSim",
+    "workdir": "/staging/tmp",
+    "shared_dir": "/staging/tmp",
+    "test": "Test"
+  }
+]
