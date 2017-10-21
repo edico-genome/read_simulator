@@ -39,14 +39,19 @@ def instantiate_pipelines():
 
     logger.info("\nVALIDATING PIPELINES\n")
     for p_idx, pipeline_settings in enumerate(settings.runs):
+
         # turn a pipeline off by specifying num_runs as 0
         num_runs = pipeline_settings.get("num_runs", 0)
+
+        # start_idx determines the first dataset name's starting idx
+        start_idx = pipeline_settings.get("start_idx", 0)
+
         if num_runs:
             logger.info("Validating run: {}\n".format(p_idx))
         else:
             logger.info("Skipping run: {}\n".format(p_idx))
             
-        for idx in range(num_runs):           
+        for idx in range(start_idx, start_idx + num_runs):           
             logger.info("Pipeline sub index: {}\n".format(idx))
             # class factory and instantiate pipeline object
             Pipeline = pipeline_factory(pipeline_settings["pipeline_name"])

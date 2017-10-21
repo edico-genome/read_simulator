@@ -119,6 +119,7 @@ class ModuleBase(object):
                 msg = msg.format(self.name, self.dataset_name, key)
                 raise PipelineExc(msg)
 
+
     def get_ht_cfg(self):
         key = "hash_table5"
         hash_dir = self.db_api.get_from_db(self.dataset_name, key)

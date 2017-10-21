@@ -195,13 +195,6 @@ class CNV_WHG_ModFastas(CNV_Base):
 
         # create single chromosomes fasta
         small_fasta = os.path.join(self.module_settings["outdir"], "chrom.fa")    
-
-        """
-        faSomeRecords = os.path.join(this_dir_path, "cnv_whg", "faSomeRecords")
-        cmd = [faSomeRecords, self.module_settings["fasta_file"],
-               self.module_settings['target_bed'], small_fasta]
-        run_process(" ".join(cmd), self.logger)
-        """
        
         cmd = ["samtools", "faidx",
                self.module_settings["fasta_file"], 
@@ -531,7 +524,6 @@ class AltContigVCF(ModuleBase):
         self.get_contig_start_stop_indexes()
         self.create_modified_fastas()
         self.create_truth_vcf()
-        self.add_module_settings_to_saved_outputs_dict()
 
 
 ###########################################################
@@ -592,7 +584,7 @@ class Pirs(ModuleBase):
         p = os.path.join(self.module_settings["outdir"], 'pirs*read.info.gz')
         l = glob.glob(p)
         if os.path.isfile(l[0]):
-            self.db_api.outputs_dict['read_info'] = l[0]
+            self.pipeline_settings['read_info'] = l[0]
         else:
             raise PipelineExc("Failed to find read_info: {}".format(p))
 
@@ -614,8 +606,8 @@ class AltContigPirsTruthSam(ModuleBase):
         for key in ["contig", "contig-1", "contig-2", "alt-sam", "read_info",
                     "contigs_combo_type", "contig-1-from", "contig-1-to", "contig-2-from",
                     "contig-2-to"]:
-            if key in self.db_api.outputs_dict:
-                self.module_settings[key] = self.db_api.outputs_dict[key]
+            if key in self.pipeline_settings:
+                self.module_settings[key] = self.pipeline_settings[key]
 
         bcf_modified_name = {}
         for i in ["1", "2"]:
@@ -656,13 +648,37 @@ class AltContigPirsTruthSam(ModuleBase):
 
 
 ###########################################################
-class RSVSim(ModuleBase):
+class SamtoolsFaidx(ModuleBase):
     default_settings = {}
-    expected_settings = []
+    expected_settings = [
+        "outdir", "workdir", "target_chrs"]
+
+    def create_truth_vcf(self):
+        truth_vcf = os.path.join(self.module_settings['outdir'], 'truth.vcf')
+        with open(truth_vcf, 'w') as stream:
+            stream.write('##fileformat=VCFv4.2\n')
+            stream.write('#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE\n')
+        self.db_api.post_truth_vcf(truth_vcf)
+
 
     def run(self):
-        self.before_run()
-        pass
+        self.get_dataset_ref()
+
+        # create single chromosomes fasta
+        small_fasta = os.path.join(self.module_settings["outdir"], "chrom.fa")    
+
+        cmd = ["samtools", "faidx",
+               self.module_settings["fasta_file"], 
+               self.module_settings["target_chrs"]]
+        run_process(" ".join(cmd), self.logger, small_fasta)
+
+        self.pipeline_settings["mod_fasta_0"] = small_fasta
+        self.pipeline_settings["mod_fasta_1"] = small_fasta
+
+        # truth vcf
+        self.create_truth_vcf()
+
+
 
 
 ###########################################################
@@ -671,7 +687,6 @@ class VCF2Fasta(ModuleBase):
     expected_settings = []
 
     def run(self):
-        self.before_run()
         pass
 
 
@@ -681,5 +696,4 @@ class CompositeDataset(ModuleBase):
     expected_settings = []
 
     def run(self):
-        self.before_run()
         pass

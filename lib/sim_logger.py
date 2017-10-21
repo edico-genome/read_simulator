@@ -8,14 +8,12 @@ dir_path = os.path.join(dir_path, '..', 'logs')
 if not os.path.isdir(dir_path):
     os.makedirs(dir_path)
 
-"""
 log_file_detail = datetime.today()
 log_file_detail = str(log_file_detail).split('.')[0].replace(
     '-', '_').replace(' ', '__').replace(':', '_')
 log_file = os.path.join(dir_path, "simulator_{}.log".format(log_file_detail))
-"""
 
-log_file = os.path.join(dir_path, "simulator.log")
+# log_file = os.path.join(dir_path, "simulator.log")
 print('logging to {}'.format(log_file))
 
 logging.basicConfig(

@@ -13,3 +13,6 @@ class CNVExomes(PipelinesBase):
 
 class CNV_WHGs(PipelinesBase):
     modules = [CNV_WHG_ModFastas, Pirs]
+
+class NoVarPirs(PipelinesBase):
+    modules = [SamtoolsFaidx, Pirs]

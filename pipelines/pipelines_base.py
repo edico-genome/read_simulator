@@ -27,15 +27,13 @@ class PipelinesBase(object):
         self.db_api.dataset_create_or_update(
             self.pipeline_settings["dataset_name"],
             self.pipeline_settings["reference"])
+        self.exit_status = "CONSTRUCTED"
 
 
     def validate_pipeline_settings(self, settings):
         """
         validate pipeline settings
         """
-        # if pipeline does not finish we'll assume it failed
-        self.exit_status = "INSTANTIATED"
-
         # before we have a local logger, we log globally 
         msg = "Validating pipeline settings: {}".format(self.__class__.__name__)
         logger.info(msg)
@@ -100,20 +98,24 @@ class PipelinesBase(object):
 
     def run(self):
         self.logger.info("\nPIPELINE: {}".format(self.name))
+        self.exit_status = "STARTED RUN"
         for inst in self.module_instances:
             try:     
-                self.exit_status = "STARTED RUN"
                 inst.before_run()
                 inst.run()
                 inst.after_run()
-                self.exit_status = "COMPLETED"
-            except PipelineExc as e:
-                msg = "Handled Exception: {}; reason: {}.\n\nContinue with next pipeline ..."
-                msg = msg.format(self.name, e)
-                self.logger.error(msg, exc_info=True)
+            except PipelineExc:
+                msg = "Handled Exception: {}\nContinue with next pipeline ..."
+                msg = msg.format(self.name)
+                self.logger.error(msg, exc_info=True)        
+                self.exit_status = "FAILED"
           	raise
-            except Exception as e:
-                msg = "Unexpected Exception: {}; reason: {}.\n\nContinue with next pipeline ..."
-                msg = msg.format(self.name, e)
+            except Exception:
+                msg = "Unexpected Exception: {}\nContinue with next pipeline ..."
+                msg = msg.format(self.name)
                 self.logger.error(msg, exc_info=True)
+                self.exit_status = "FAILED"
           	raise
+        self.exit_status = "COMPLETED"
+        self.logger.info("Update exit status to completed")
+
