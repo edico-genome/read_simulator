@@ -26,6 +26,7 @@ class ModuleBase(object):
         self.validate_module_settings()
         self.create_workdir_outdir()
         self.db_api = db_api
+        self.set_promised_outputs()
 
     @abstractproperty
     def default_settings(self):
@@ -45,6 +46,19 @@ class ModuleBase(object):
         """
         pass
 
+    @abstractproperty
+    def promised_outputs(self):
+        """
+        this module will create these outputs
+        so next module can use this to validate expected settings
+        :rtype: list
+        """
+        pass
+
+    def set_promised_outputs(self):
+        for output in self.promised_outputs:
+            self.pipeline_settings[output] = "_PROMISED"
+
     def validate_module_settings(self):
         """
         for each module use the default settings
@@ -56,15 +70,14 @@ class ModuleBase(object):
             if key in self.pipeline_settings:
                 self.module_settings[key] = self.pipeline_settings[key]
             if key not in self.module_settings:
-                msg = "Module: {}, missing settings: {}".format(self.name, key)
-                raise PipelineExc(msg)
+                self.logger.error("\nMissing pipeline setting: {}".format(key))
+                sys.exit(1)
 
 
     def create_workdir_outdir(self):
         """
         create sub directories for each module
         """
-        # import pdb; pdb.set_trace()
 
         # workdir 
         self.module_settings['workdir'] = os.path.join(
@@ -97,7 +110,13 @@ class ModuleBase(object):
 
     def after_run(self):
         self.logger.info("- done: {}".format(self.name))
+        self.check_promised_outputs()
         self.exit_status = "COMPLETED"
+
+    def check_promised_outputs(self):
+        for output in self.promised_outputs:
+            if self.pipeline_settings[output] == "_PROMISED":
+                raise PipelineExc(" - missing promised result: {}".format(output))
 
     def add_module_settings_to_saved_outputs_dict(self):
         for key in self.module_settings:
@@ -113,8 +132,8 @@ class ModuleBase(object):
 
         keys = ["ref_type", "fasta_file"]
         for key in keys:
-            self.module_settings[key] = rv[key]
-            if not self.module_settings[key]:
+            self.pipeline_settings[key] = rv[key]
+            if not self.pipeline_settings[key]:
                 msg = "{}, dataset {} missing HT reference file: {}"
                 msg = msg.format(self.name, self.dataset_name, key)
                 raise PipelineExc(msg)

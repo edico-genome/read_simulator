@@ -82,8 +82,21 @@ def instantiate_pipelines(settings):
     return pipelines
 
 def run_this_pipeline(p, result_queue):
-    state = p.run()
-    result_queue.put((p.name, state))
+    try:     
+        p.run()
+        state = "COMPLETED"
+    except PipelineExc:
+        msg = "Handled Exception: {}\nContinue with next pipeline ..."
+        msg = msg.format(p.name)
+        p.logger.error(msg, exc_info=True)        
+        state = "HANLDED FAIL"
+    except Exception:
+        msg = "Unexpected Exception: {}\nContinue with next pipeline ..."
+        msg = msg.format(p.name)
+        p.logger.error(msg, exc_info=True)
+        state = "UNEXPECTED FAIL"
+
+    result_queue.put((p.name, p.dataset_name, state))
 
 def run_pipelines(pipelines):
     # run processes in parallel
@@ -101,15 +114,13 @@ def run_pipelines(pipelines):
     if processes:
         for p in processes: p.join()
 
-    logger.info("\nSIMULATOR PIPELINE EXIST STATES\n")
+    logger.info("\nSIMULATOR PIPELINE EXIT STATE\n")
     exit_sig = 0
     for pipeline in pipelines:
         rv = result_queue.get()
-        print("- {} {}".format(rv[0], rv[1]))
-        if rv[1] != "COMPLETED":
+        print("- {:10} {:35} {:15}".format(rv[0], rv[1], rv[2]))
+        if rv[2] != "COMPLETED":
             exit_sig = 1
-            print "GGGGR"
-            print rv
     return exit_sig
     
 

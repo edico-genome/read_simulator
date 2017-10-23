@@ -65,7 +65,7 @@ class DBAPI(object):
             }
 
         logger.debug("Uploading to db, Url: {}".format(url))
-        # logger.debug(pprint(data))
+        logger.debug(pprint(data))
         res = requests.post(url, params=data)
         res.raise_for_status()
 

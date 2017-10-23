@@ -8,14 +8,17 @@ class VLRD(PipelinesBase):
 class AltContig(PipelinesBase):
     modules = [AltContigVCF, Pirs]  # AltContigPirsTruthSam]
 
-class CNVExomes(PipelinesBase):
+class CNV_Exomes(PipelinesBase):
     modules = [CNVExomeModFastas, Capsim]
 
 class CNV_WHGs(PipelinesBase):
-    modules = [CNV_WHG_ModFastas, Pirs]
+    modules = [RSVSIM_VCF, VCF2Fastas, Pirs]
 
-class NoVarPirs(PipelinesBase):
-    modules = [SamtoolsFaidx, Pirs]
+class Normal(PipelinesBase):
+    modules = [CleanVCF, VCF2Fastas, Pirs]
+
+class Tumor(PipelinesBase):
+    modules = [TumorHead, VCF2Fastas, Pirs_Tumor]
 
 class Test(PipelinesBase):
     modules = [TestMod]

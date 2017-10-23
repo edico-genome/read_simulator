@@ -45,7 +45,8 @@ class PipelinesBase(object):
 
         for i in expected:
             if not i in self.pipeline_settings:
-                raise PipelineExc("Missing pipeline setting: {}".format(i))
+                self.logger.error("\nMissing pipeline setting: {}".format(i))
+                sys.exit(1)
 
     def update_settings_for_multiple_runs(self):
         """ 
@@ -96,24 +97,9 @@ class PipelinesBase(object):
     def run(self):
         self.logger.info("\nPIPELINE: {}".format(self.name))
         for inst in self.module_instances:
-            try:     
-                state = "STARTED"
-                inst.before_run()
-                inst.run()
-                inst.after_run()
-                state = "COMPLETED"
-            except PipelineExc:
-                msg = "Handled Exception: {}\nContinue with next pipeline ..."
-                msg = msg.format(self.name)
-                self.logger.error(msg, exc_info=True)        
-                self.exit_status = {"STATUS": "FAILED"}
-                state = "FAILED"
-            except Exception:
-                msg = "Unexpected Exception: {}\nContinue with next pipeline ..."
-                msg = msg.format(self.name)
-                self.logger.error(msg, exc_info=True)
-                self.exit_status = {"STATUS": "FAILED"}
-                state = "FAILED"
-            finally: 
-                return state
+            inst.before_run()
+            inst.run()
+            inst.after_run()
+
+
         

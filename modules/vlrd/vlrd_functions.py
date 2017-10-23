@@ -411,7 +411,7 @@ def create_truth_vcf_and_fastas(settings):
     logger.info('variant simulation complete')
 
     res = {"truth_vcf": settings['truth_vcf'],
-           "fasta0": settings['mod_fasta_path_0'],
-           "fasta1": settings['mod_fasta_path_1']}
+           "fasta_1": settings['mod_fasta_path_0'],
+           "fasta_2": settings['mod_fasta_path_1']}
 
     return res

@@ -8,41 +8,15 @@ import glob
 import logging
 import subprocess
 from modules_base import ModuleBase
-from lib.common import PipelineExc
+from lib.common import PipelineExc, run_process, trim_fasta, trim_vcf
+from lib.common import remove_contig_name_descriptions
 from enum import Enum
 from vlrd import vlrd_functions
 from cnv_exomes import create_truth_vcf
+import gzip
 
 
 this_dir_path = os.path.dirname(os.path.realpath(__file__))
-
-
-###########################################################
-def run_process(cmd, _logger, outfile=None):
-    """ helper function to run cmd """
-    _logger.info("Run cmd: {}".format(cmd))
-
-    if not isinstance(cmd, list):
-        cmd = cmd.split()
-    arguments = cmd
-
-    if outfile:
-        with open(outfile, 'w') as f:
-            process = subprocess.Popen(
-                arguments,
-                stdout=f)
-    else:
-        process = subprocess.Popen(
-            arguments,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-
-    process.wait()
-    output, error = process.communicate()
-    _logger.debug(output)
-    
-    if process.returncode:
-        raise PipelineExc("bash cmd failed: {}".format(error))
-    return output
 
 
 ###########################################################
@@ -54,13 +28,12 @@ class CNV_Base(ModuleBase):
         "nTandemDuplications", 
         "outdir", "workdir", 
         "target_chrs"]
+    promised_outputs = []
+
 
     def get_refs(self):
         self.get_dataset_ref()
-        for key in ["ref_type", "fasta_file"]:
-            if not self.module_settings[key]:
-                msg = "{}, dataset {} missing: {}".format(self.name, self.dataset_name, key)
-                raise PipelineExc(msg)
+
 
     def add_contig_names_to_target_bed(self):
         self.module_settings['target_bed_contigs_named'] = "{}_contigs_named".format(
@@ -72,53 +45,10 @@ class CNV_Base(ModuleBase):
             for idx, line in enumerate(stream_in):
                 new_line = "{}\ttarget-{}\n".format(line.replace("\n",""), idx+1)
                 stream_out.write(new_line)
-        self.logger.info("Wrote results to: {}".format(self.module_settings['target_bed_contigs_named']))
+        self.logger.info("Wrote results to: {}".format(
+                self.module_settings['target_bed_contigs_named']))
         self.pipeline_settings["lock"].release()
         
-
-    def remove_contig_name_descriptions(self):
-        """ the RSVSim tool fails when we use fastas with long contig names like 
-        >1 dna:chromosome chromosome:GRCh37:1:1:249250621:1 
-        this function strips the crud and copies the file to staging """
-
-        # only have one process create this file
-        self.pipeline_settings["lock"].acquire()
-        basename = os.path.basename(self.module_settings["fasta_file"])
-        new_fasta = os.path.join(self.module_settings["shared_dir"], "{}_mod".format(basename))
-
-        # look at first line to determine if we need to process
-        with open(self.module_settings["fasta_file"], 'r') as stream_in:
-            first_line = stream_in.readline().strip("\n")
-        if len(first_line.split()) == 1:
-            self.logger.info("Fasta file in expected format, no need to process")
-            self.pipeline_settings["lock"].release()
-            return
-        
-        self.logger.info("Fasta file first line: {}".format(first_line))
-        self.logger.info("Fasta file not in expected format")
-
-        if os.path.isfile(new_fasta):
-            self.logger.info("Fasta previously preprocessed and available for use by RSVSim")
-        else:
-            self.logger.info("Preprocessing fasta file for use by RSVSim")            
-            with open(self.module_settings["fasta_file"], 'r') as stream_in, \
-                 open(new_fasta, "w") as stream_out:
-                try:
-                    for line in stream_in:
-                        if line[0] == ">":
-                            line = "{}\n".format(line.split()[0])
-                        stream_out.write(line)
-                except:
-                    self.logger.error(
-                        "Failed to preprocess fasta line: {}".format(line), exc_info=True)
-                    raise
-                    
-            cmd = "samtools faidx {}".format(new_fasta)
-            self.logger.info(cmd)
-            subprocess.check_call(cmd, shell=True)
-        self.pipeline_settings["lock"].release()
-        self.module_settings["fasta_file"] = new_fasta
-
 
     def create_and_submit_truth_tsv_and_vcf(self, csv_files):
         """ create truth files """
@@ -145,20 +75,93 @@ class CNV_Base(ModuleBase):
 
 
 ###########################################################
-class CNV_WHG_ModFastas(CNV_Base):
+class TumorHead(ModuleBase):
+    default_settings = {}
+    expected_settings = ["pon_vcf", "cosmic_vcf", "dbsnp_vcf", "truth_set_bed", "truth_set_vcf"]
+    promised_outputs = []
+
+    def run(self):
+        for i in self.expected_settings:
+            self.db_api.upload_to_db(i, self.pipeline_settings[i])
+            
+
+
+###########################################################
+class VCF2Fastas(ModuleBase):
+    default_settings = {}
+    expected_settings = ["outdir", "workdir", "truth_set_vcf"]
+    promised_outputs = ["mod_fasta_1", "mod_fasta_2", "fasta_file"]
+    
+    def create_fastas(self):
+        """
+        use bcftools to create 2 modified fastas that can be used for read simulation
+        """
+
+        # make sure we have a clean fasta
+        # remove_contig_name_descriptions(self)
+
+        # if we should only use a subset (e.g. chr20) of the input fasta/ vcf for speed
+        if self.pipeline_settings.get("target_chrs", None):            
+            trim_fasta(self)
+            trim_vcf(self)
+            
+        # only modify the fastas if there are variants in the VCFs
+        found_a_variant = 0
+        open_safe = gzip.open if (".gz" in self.pipeline_settings["truth_set_vcf"]) else open
+        with open_safe(self.pipeline_settings["truth_set_vcf"]) as stream_in:
+            for line in stream_in:
+                if line[0] == "#":
+                    continue
+                else:
+                    found_a_variant = 1
+                    break
+
+        # use the unmodified fasta to simulate reads if there are no variants
+        if not found_a_variant:
+            self.pipeline_settings["mod_fasta_1"] = self.pipeline_settings["fasta_file"]
+            self.pipeline_settings["mod_fasta_2"] = self.pipeline_settings["fasta_file"]
+        else:
+            # else create two modified fastas
+            cmd_template = "bcftools consensus -c {liftover} -H {haplotype} " + \
+                "-f {fasta_file} {truth_set_vcf}"
+
+            for hap in [1, 2]:
+                mod_fasta = os.path.join(
+                    self.module_settings["workdir"], "mod_fasta_{}.fa".format(hap))
+                liftover = os.path.join(
+                    self.module_settings["workdir"], "liftover_{}.txt".format(hap))
+                options = {
+                    "liftover": liftover, 
+                    "haplotype": hap, 
+                    "fasta_file": self.pipeline_settings["fasta_file"],
+                    "truth_set_vcf": self.pipeline_settings['truth_set_vcf']}
+                cmd = cmd_template.format(**options)
+                try:
+                    run_process(cmd, self.logger, mod_fasta)
+                except:
+                    self.logger.info("BCFTools failed. Let's continue and hope for the best")
+
+                # update pipeline settings
+                self.pipeline_settings["mod_fasta_{}".format(hap)] = mod_fasta
+                print "create fastad {}".format(hap)
+
+
+    def run(self):
+        self.get_dataset_ref()
+        self.create_fastas()
+        
+
+###########################################################
+class RSVSIM_VCF(CNV_Base):
     expected_settings = [
         "size_ins", "size_dels", "size_dups", 
         "outdir", "workdir", "target_chrs", "shared_dir"]
-
-    def run(self):
-        self.get_refs()
-        self.remove_contig_name_descriptions()
-
-        _mod_fastas_script = os.path.join(this_dir_path, "cnv_whg", "RSVSim_generate_cnv.R")
-
-        # create Fastas
+    promised_outputs = []
+    
+    def create_truth_vcf(self):
         # Rscript $cnvsimultoolsdir/RSVSim_generate_cnv.R $chrom $gencnvdir $sizeins $sizedel $sizedup
-        cmd = _mod_fastas_script
+        _rsv_script = os.path.join(this_dir_path, "cnv_whg", "RSVSim_generate_cnv.R")
+        cmd = _rsv_script
         cmd += " {target_chrs}"
         cmd += " {outdir}"
         cmd += " {size_ins}"
@@ -171,53 +174,11 @@ class CNV_WHG_ModFastas(CNV_Base):
         csv_files = ["deletions.csv", "insertions.csv", "tandemDuplications.csv"]
         self.create_and_submit_truth_tsv_and_vcf(csv_files)
 
-        self.module_settings['target_bed'] = os.path.join(
-            self.module_settings["outdir"], "target.bed")
-        
-        chrom = os.path.join(self.module_settings["outdir"], "chrom.txt")
-        with open(self.module_settings['target_bed'], 'w') as stream_out:
-            stream_out.write("{}\n".format(self.module_settings["target_chrs"]))
-
-        # create single chromosomes fasta
-        small_fasta = os.path.join(self.module_settings["outdir"], "chrom.fa")    
-       
-        cmd = ["samtools", "faidx",
-               self.module_settings["fasta_file"], 
-               self.module_settings["target_chrs"]]
-        run_process(" ".join(cmd), self.logger, small_fasta)
-
-        # modify the two fastas
-        cmd_template = "bcftools consensus -c {liftover} -H {haplotype} " + \
-                       "-f {small_fasta} {truth_vcf}"
-
-        # mod fasta 0
-        mod_fasta_0 = os.path.join(
-            self.module_settings["outdir"], "mod_fasta_0.fa")
-        options = {
-            "liftover": os.path.join(
-                self.module_settings["outdir"], "liftover_0.txt"),
-            "haplotype": 1, 
-            "small_fasta": small_fasta,
-            "truth_vcf": self.module_settings['truth_set_vcf']}
-        cmd = cmd_template.format(**options)
-        run_process(cmd, self.logger, mod_fasta_0)
-
-        # mod fasta 1
-        mod_fasta_1 = os.path.join(
-            self.module_settings["outdir"], "mod_fasta_1.fa")
-        options = {
-            "liftover": os.path.join(
-                self.module_settings["outdir"], "liftover_1.txt"),
-            "haplotype": 2, 
-            "small_fasta": small_fasta,
-            "truth_vcf": self.module_settings['truth_set_vcf']}
-        cmd = cmd_template.format(**options)
-        run_process(cmd, self.logger, mod_fasta_1)
-
-        # update db with results
-        self.pipeline_settings["mod_fasta_0"] = mod_fasta_0
-        self.pipeline_settings["mod_fasta_1"] = mod_fasta_1
-
+    def run(self):
+        self.get_refs()
+        remove_contig_name_descriptions(self)
+        self.create_truth_vcf()
+  
 
 ###########################################################
 class CNVExomeModFastas(CNV_Base):
@@ -228,10 +189,11 @@ class CNVExomeModFastas(CNV_Base):
         "nTandemDuplications", "maxEventLength",
         "minEventLength", "outdir", "workdir",
         "cnv_db", "target_bed", "shared_dir"]
+    promised_outputs = []
 
     def run(self):
         self.get_refs()
-        self.remove_contig_name_descriptions()
+        remove_contig_name_descriptions(self)
 
         # Gavin's script to create exome variants
         _mod_fastas_script = os.path.join(this_dir_path,
@@ -253,21 +215,14 @@ class CNVExomeModFastas(CNV_Base):
         run_process(cmd, self.logger)
 
         # create truth
-        csv_files = [
-            "insertions1.csv", "insertions2.csv",
-            "deletions1.csv", "deletions2.csv",
-            "tandemDuplications1.csv", "tandemDuplications2.csv"
-            ]
+        csv_files = ["insertions1.csv", "insertions2.csv",
+                     "deletions1.csv", "deletions2.csv",
+                     "tandemDuplications1.csv", "tandemDuplications2.csv"]
         self.create_and_submit_truth_tsv_and_vcf(csv_files)
-
 
         # get modified fasta files
         fastas = {"contig-1": "{outdir}/genome_rearranged1.fasta".format(**self.module_settings),
                   "contig-2": "{outdir}/genome_rearranged2.fasta".format(**self.module_settings)}
-
-        self.pipeline_settings["mod_fasta_0"] = fastas["contig-1"]
-        self.pipeline_settings["mod_fasta_1"] = fastas["contig-2"]
-
 
         # update target bed
         self.add_contig_names_to_target_bed()
@@ -280,10 +235,11 @@ class CNVExomeModFastas(CNV_Base):
 class Capsim(ModuleBase):
     default_settings = {}
     expected_settings = ["number-of-reads", "read-len", "fragment-size"]
+    promised_outputs = []
 
     def run(self):
         try:
-            for i in ["mod_fasta_0", "mod_fasta_1"]:
+            for i in ["mod_fasta_1", "mod_fasta_2"]:
                 assert os.path.isfile(self.pipeline_settings[i])
                 self.module_settings[i] = self.pipeline_settings[i]
         except Exception as e:
@@ -300,7 +256,7 @@ class Capsim(ModuleBase):
             " -l {read-len}" + \
             " -f {fragment-size}" + \
             " -o {outdir}" + \
-            " -1 {mod_fasta_0} -2 {mod_fasta_1}"
+            " -1 {mod_fasta_1} -2 {mod_fasta_2}"
         cmd = cmd.format(**self.module_settings)
         run_process(cmd, self.logger)
 
@@ -317,6 +273,7 @@ class Capsim(ModuleBase):
 class VLRDVCF(ModuleBase):
     default_settings = {}
     expected_settings = ["varrate"]
+    promised_outputs = []
 
     def get_refs(self):
         self.get_dataset_ref()
@@ -331,8 +288,8 @@ class VLRDVCF(ModuleBase):
         self.get_refs()
         res = vlrd_functions.create_truth_vcf_and_fastas(self.module_settings)
         self.logger.info(res)
-        self.pipeline_settings["mod_fasta_0"] = res['fasta0'] 
-        self.pipeline_settings["mod_fasta_1"] = res['fasta1']
+        self.pipeline_settings["mod_fasta_1"] = res['fasta_1'] 
+        self.pipeline_settings["mod_fasta_2"] = res['fasta_2']
         self.db_api.post_truth_vcf(res['truth_vcf'])
 
 
@@ -346,6 +303,7 @@ class ContigComboType(Enum):
 class AltContigVCF(ModuleBase):
     default_settings = {}
     expected_settings = ["contig-1", "contig-2", "alt-sam"]
+    promised_outputs = []
 
     def check_output(self, cmd):
         """ helper function to run cmd """
@@ -474,8 +432,8 @@ class AltContigVCF(ModuleBase):
             except Exception as e:
                 raise PipelineExc(e)
 
-        fastas = {"contig-1": "{outdir}/mod_fasta_0.fa".format(**self.module_settings),
-                  "contig-2": "{outdir}/mod_fasta_1.fa".format(**self.module_settings)}
+        fastas = {"contig-1": "{outdir}/mod_fasta_1.fa".format(**self.module_settings),
+                  "contig-2": "{outdir}/mod_fasta_2.fa".format(**self.module_settings)}
 
         for c in ["contig-1", "contig-2"]:
             cmd = "samtools faidx {} {}:{}-{} > {}"
@@ -486,8 +444,8 @@ class AltContigVCF(ModuleBase):
                              fastas[c])
             check_call()
 
-        self.pipeline_settings["mod_fasta_0"] = fastas["contig-1"]
-        self.pipeline_settings["mod_fasta_1"] = fastas["contig-2"]
+        self.pipeline_settings["mod_fasta_1"] = fastas["contig-1"]
+        self.pipeline_settings["mod_fasta_2"] = fastas["contig-2"]
 
 
     def create_truth_vcf(self):
@@ -514,15 +472,18 @@ class AltContigVCF(ModuleBase):
 ###########################################################
 class Pirs(ModuleBase):
     default_settings = {
+        "insert-len-mean": 400,
         "PE100": "/opt/pirs-2.0.1/Profiles/Base-Calling_Profiles/humNew.PE100.matrix.gz",
         "indels": "/opt/pirs-2.0.1/Profiles/InDel_Profiles/phixv2.InDel.matrix",
         "gcdep": "/opt/pirs-2.0.1/Profiles/GC-depth_Profiles/humNew.gcdep_100.dat",
     }
-    expected_settings = ["PE100", "indels", "gcdep"]
+    expected_settings = ["PE100", "indels", "gcdep", "mod_fasta_1",
+                         "mod_fasta_2", "fasta_file", "coverage"]
+    promised_outputs = []
 
     def run(self):
         try:
-            for i in ["mod_fasta_0", "mod_fasta_1"]:
+            for i in ["mod_fasta_1", "mod_fasta_2"]:
                 assert os.path.isfile(self.pipeline_settings[i])
                 self.module_settings[i] = self.pipeline_settings[i]
         except Exception as e:
@@ -530,42 +491,41 @@ class Pirs(ModuleBase):
 
         # run
         self.logger.info('Pirs: simulating reads ...')
-        log = os.path.join(self.module_settings['outdir'], "pirs.log")
-        self.module_settings['pirs_log'] = log
+        pirs_log = os.path.join(self.module_settings['outdir'], "pirs.log")
 
-        self.module_settings["insert-len-mean"] = 400
 
-        cmd = "pirs simulate -l 100 -x 30 -o {outdir}/pirs" + \
+        # need to update the module settings
+        for i in ["mod_fasta_1", "mod_fasta_2"]:
+            self.module_settings[i] = self.pipeline_settings[i]
+
+        cmd = "pirs simulate -l 100 -x {coverage} -o {outdir}/pirs" + \
               " --insert-len-mean={insert-len-mean} --insert-len-sd=40 --diploid " + \
               " --base-calling-profile={PE100}" + \
               " --indel-error-profile={indels}" + \
               " --gc-bias-profile={gcdep}" + \
               " --phred-offset=33 --no-gc-bias -c gzip " + \
-              " -t 48 {mod_fasta_0} {mod_fasta_1} " + \
-              " --no-indel-errors &> {pirs_log}"
-
+              " -t 48 {mod_fasta_1} {mod_fasta_2} " + \
+              " --no-indel-errors"
         cmd = cmd.format(**self.module_settings)
+        run_process(cmd, self.logger)
 
-        self.logger.info("Pirs cmd: {}".format(cmd))
-        try:
-            subprocess.check_output(cmd, shell=True)
-        except Exception() as e:
-            self.logger.error('Error message %s' % e)
-            raise
-
+        # put FQs in DB
         self.logger.info('Find the pirs generated FQs and upload to DB')
         fq_lists = []
         for i in ["1", "2"]:
-            p = os.path.join(self.module_settings["outdir"], 'pirs*{}_{}.fq.gz'.format(
+            p = os.path.join(
+                self.module_settings["outdir"],
+                'pirs*{}_{}.fq.gz'.format(
                     self.module_settings["insert-len-mean"], i))
             p_res = glob.glob(p)
 
             if len(p_res) != 1: 
-                raise PipelineExc("Too many/few matching fastqs found in Pirs output folder: {}".format(p_res))
+                raise PipelineExc("Too many/few matching fastqs found in "
+                                  "Pirs output folder: {}".format(p_res))
             fq_lists.append(p_res[0])
-
         self.db_api.post_reads(fq_lists[0], fq_lists[1])
 
+        # read info for lift over and truth sam files
         p = os.path.join(self.module_settings["outdir"], 'pirs*read.info.gz')
         l = glob.glob(p)
         if os.path.isfile(l[0]):
@@ -575,9 +535,104 @@ class Pirs(ModuleBase):
 
 
 ###########################################################
+class Pirs_Tumor(ModuleBase):
+    default_settings = {
+        "insert-len-mean": 400,
+        "PE100": "/opt/pirs-2.0.1/Profiles/Base-Calling_Profiles/humNew.PE100.matrix.gz",
+        "indels": "/opt/pirs-2.0.1/Profiles/InDel_Profiles/phixv2.InDel.matrix",
+        "gcdep": "/opt/pirs-2.0.1/Profiles/GC-depth_Profiles/humNew.gcdep_100.dat",
+    }
+    expected_settings = ["PE100", "indels", "gcdep", "mod_fasta_1", "mod_fasta_2",
+                         "fasta_file", "tumor_cov", "non_tumor_cov"]
+    promised_outputs = []
+
+    def run(self):
+        # create reads for tumor sample 
+        # non-tumor reads are included in tumor fastq sheet to adjust allele frequencies
+        # the actual "normal" fqs for use in tumor-normal runs are simulated seperately
+        self.logger.info('Pirs Tumor: simulating tumor reads ...')
+        log_t = os.path.join(self.module_settings['outdir'], "pirs_tumor.log")
+        log_nt = os.path.join(self.module_settings['outdir'], "pirs_non_tumor.log")
+
+        # need to update the module settings
+        for i in ["mod_fasta_1", "mod_fasta_2", "fasta_file"]:
+            self.module_settings[i] = self.pipeline_settings[i]
+
+        # tumor
+        tumor_cmd = \
+            "pirs simulate -l 100 -x {tumor_cov} -o {outdir}/pirs_tumor" + \
+            " --insert-len-mean={insert-len-mean} --insert-len-sd=40 --diploid " + \
+            " --base-calling-profile={PE100}" + \
+            " --indel-error-profile={indels}" + \
+            " --gc-bias-profile={gcdep}" + \
+            " --phred-offset=33 --no-gc-bias -c gzip " + \
+            " -t 48 {mod_fasta_1} {mod_fasta_2} " + \
+            " --no-indel-errors"
+        tumor_cmd = tumor_cmd.format(**self.module_settings)
+
+        # non-tumor
+        non_tumor_cmd = \
+            "pirs simulate -l 100 -x {non_tumor_cov} -o {outdir}/pirs_non_tumor" + \
+            " --insert-len-mean={insert-len-mean} --insert-len-sd=40 --diploid " + \
+            " --base-calling-profile={PE100}" + \
+            " --indel-error-profile={indels}" + \
+            " --gc-bias-profile={gcdep}" + \
+            " --phred-offset=33 --no-gc-bias -c gzip " + \
+            " -t 48 {fasta_file} {fasta_file} " + \
+            " --no-indel-errors"
+        non_tumor_cmd = non_tumor_cmd.format(**self.module_settings)
+
+        for cmd in [tumor_cmd, non_tumor_cmd]:
+            run_process(cmd, self.logger)
+
+        # tumor
+        tumor_fqs = []
+        for i in ["1", "2"]:
+            p = os.path.join(
+                self.module_settings["outdir"],
+                'pirs_tumor*{}_{}.fq.gz'.format(
+                    self.module_settings["insert-len-mean"], i))
+            p_res = glob.glob(p)
+            if len(p_res) != 1: 
+                raise PipelineExc(
+                    "Too many/few matching tumor fastqs found in Pirs "
+                    "output folder: {}".format(p_res))
+            tumor_fqs.append(p_res[0])
+
+        # non_tumor
+        non_tumor_fqs = []
+        for i in ["1", "2"]:
+            p = os.path.join(
+                self.module_settings["outdir"],
+                'pirs_non_tumor*{}_{}.fq.gz'.format(
+                    self.module_settings["insert-len-mean"], i))
+            p_res = glob.glob(p)
+            if len(p_res) != 1: 
+                raise PipelineExc(
+                    "Too many/few matching non-tumor fastqs found in Pirs "
+                    "output folder: {}".format(p_res))
+            non_tumor_fqs.append(p_res[0])
+
+        # fq list
+        self.logger.info('Find the pirs generated FQs, create fq list and upload to DB')
+        fq_list = os.path.join(self.module_settings["outdir"], 'tumor_fq_list.csv')
+        with open(fq_list, 'w') as stream_out:
+            stream_out.write("RGPL,RGID,RGSM,RGLB,Lane,Read1File,RGCN,Read2File,RGDS,RGDT,RGPI\n")
+            tmp = "DRAGEN_RGPL,DRAGEN_RGID_tumor_{},sim_tumor,ILLUMINA,{}" + \
+                ",{},DRAGEN_RGCN,{},DRAGEN_RGDS,DRAGEN_RGDT,DRAGEN_RGPI\n"
+            line = tmp.format(1, 1, tumor_fqs[0], tumor_fqs[1])
+            stream_out.write(line)
+
+            line = tmp.format(2, 2, non_tumor_fqs[0], non_tumor_fqs[1])
+            stream_out.write(line)
+        self.db_api.upload_to_db('csv_list', fq_list)
+
+
+###########################################################
 class AltContigPirsTruthSam(ModuleBase):
     default_settings = {}
     expected_settings = []
+    promised_outputs = []
 
     def run(self):
         # truth sam
@@ -616,14 +671,17 @@ class AltContigPirsTruthSam(ModuleBase):
         }
 
         cmd = "{xform} --read-info <(zcat {read_info}) --alt-sam {alt-sam}"
-        cmd += " --contig1 {bcf-contig-1} --contig1-rename {orig-contig-1} --contig1-offset {contig-1-from}"
-        cmd += " --contig2 {bcf-contig-2} --contig2-rename {orig-contig-2} --contig2-offset {contig-2-from}"
+        cmd += " --contig1 {bcf-contig-1} --contig1-rename {orig-contig-1}"
+        cmd += " --contig1-offset {contig-1-from}"
+        cmd += " --contig2 {bcf-contig-2} --contig2-rename {orig-contig-2}"
+        cmd += " --contig2-offset {contig-2-from}"
         cmd += " > {truth_sam}"
 
         cmd = cmd.format(**options)
 
         try:
             self.logger.info("Truth SAM cmd: {}".format(cmd))
+            # for redirected streams subprocess requires the actual bash executable
             res = subprocess.check_output(cmd, shell=True, executable='/bin/bash')
             self.logger.info("Response: {}".format(res))
             self.logger.info("Truth sam created: {}".format(self.module_settings["truth_sam"]))
@@ -633,10 +691,10 @@ class AltContigPirsTruthSam(ModuleBase):
 
 
 ###########################################################
-class SamtoolsFaidx(ModuleBase):
+class CleanVCF(ModuleBase):
     default_settings = {}
-    expected_settings = [
-        "outdir", "workdir", "target_chrs"]
+    expected_settings = ["outdir"]
+    promised_outputs = ["truth_set_vcf"]
 
     def create_truth_vcf(self):
         truth_vcf = os.path.join(self.module_settings['outdir'], 'truth.vcf')
@@ -644,50 +702,29 @@ class SamtoolsFaidx(ModuleBase):
             stream.write('##fileformat=VCFv4.2\n')
             stream.write('#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE\n')
         self.db_api.post_truth_vcf(truth_vcf)
+        
+        cmd = ["bgzip", "-f", truth_vcf]
+        run_process(cmd, self.logger)
+        truth_vcf = truth_vcf + ".gz"
 
+        cmd = ["bcftools", "index", truth_vcf]
+        run_process(cmd, self.logger)
+
+        self.pipeline_settings["truth_set_vcf"] = truth_vcf
 
     def run(self):
-        self.get_dataset_ref()
-
-        # create single chromosomes fasta
-        small_fasta = os.path.join(self.module_settings["outdir"], "chrom.fa")    
-
-        cmd = ["samtools", "faidx",
-               self.module_settings["fasta_file"], 
-               self.module_settings["target_chrs"]]
-        run_process(" ".join(cmd), self.logger, small_fasta)
-
-        self.pipeline_settings["mod_fasta_0"] = small_fasta
-        self.pipeline_settings["mod_fasta_1"] = small_fasta
-
-        # truth vcf
         self.create_truth_vcf()
-
 
 
 ###########################################################
 class TestMod(ModuleBase):
+    """ module for quick functional test """
     default_settings = {}
     expected_settings = ["test"]
+    promised_outputs = []
 
     def run(self):
         self.pipeline_settings["test"] = "test"
         self.test = "test2"
 
 
-###########################################################
-class VCF2Fasta(ModuleBase):
-    default_settings = {}
-    expected_settings = []
-
-    def run(self):
-        pass
-
-
-###########################################################
-class CompositeDataset(ModuleBase):
-    default_settings = {}
-    expected_settings = []
-
-    def run(self):
-        pass
