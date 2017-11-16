@@ -1,0 +1,20 @@
+#!/bin/bash
+
+# 111
+echo "1"
+echo "bcftools reheader -s test /mnt/vault/NA12878_NIST_gold_set/refdata/giab/release/NA12878_HG001/NISTv3.3.2/GRCh37/HG001_GRCh37_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.vcf.gz | bcftools view /dev/stdin > test_out1.txt"
+
+bcftools reheader -s test /mnt/vault/NA12878_NIST_gold_set/refdata/giab/release/NA12878_HG001/NISTv3.3.2/GRCh37/HG001_GRCh37_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.vcf.gz | bcftools view -O b /dev/stdin > test_out1.bcf
+
+
+# 222
+echo "2"
+echo "bcftools reheader -s test /mnt/vault/NA12878_NIST_gold_set/refdata/giab/release/NA12878_HG001/NISTv3.3.2/GRCh37/HG001_GRCh37_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.vcf.gz | bcftools view /dev/stdin > test_out2.txt"
+
+bcftools reheader -s test /mnt/vault/NA12878_NIST_gold_set/refdata/giab/release/NA12878_HG001/NISTv3.3.2/GRCh37/HG001_GRCh37_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.vcf.gz | bcftools view -O b /dev/stdin > test_out2.bcf
+
+# 333
+echo "3"
+echo "bcftools concat test_out1.vcf test_out2.vcf  > test3"
+bcftools concat test_out1.bcf test_out2.bcf  > test3.bcf
+

@@ -52,17 +52,15 @@ class PipelinesBase(object):
         """ 
         create subdirs for each dataset
         """
-
         if self.pipeline_idx > 0:
-            self.pipeline_settings["dataset_name"] += "_{}".format(self.pipeline_idx) 
-        
-        self.pipeline_settings["workdir"] = os.path.join(
-            self.pipeline_settings["workdir"],
-            self.pipeline_settings["dataset_name"])
+            self.pipeline_settings["dataset_name"] += "_{}".format(
+                self.pipeline_idx) 
 
-        self.pipeline_settings["outdir"] = os.path.join(
-            self.pipeline_settings["outdir"],
-            self.pipeline_settings["dataset_name"])
+        for d in ["workdir", "outdir"]:
+            self.pipeline_settings[d] = os.path.join(
+                self.pipeline_settings[d],
+                self.pipeline_settings["dataset_name"])
+
 
     def create_work_and_outdir(self):
         """
@@ -100,6 +98,8 @@ class PipelinesBase(object):
             inst.before_run()
             inst.run()
             inst.after_run()
+
+
 
 
         

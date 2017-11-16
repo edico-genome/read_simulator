@@ -13,11 +13,13 @@
   {
     "num_runs": 1,
     "pipeline_name": "VLRD",
-    "dataset_name": "vlrd_chr1_normalNoise_varRate0.005",
+    "dataset_name": "vlrd_baylor_varRate_0.02",
     "reference": "hs37d5",
     "outdir": "/mnt/archive/sim_data/dSim",
     "workdir": "/staging/tmp",
     "varrate": 0.005,
-    "useIndelErrors": 0
+    "coverage" : "30",
+    "useIndelErrors": 0,
+    "target_region_bed": "/mnt/archive/sim_data/dSim/vlrd/baylor_files/wes_pseudogene_v2.bed"
   }
 ]

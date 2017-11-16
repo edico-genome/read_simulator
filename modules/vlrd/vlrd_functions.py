@@ -169,8 +169,8 @@ def sample_variant():
         ('ins', 'TTCAT'),
         ('ins', 'GTCCAT'),
         ('ins', 'AATCGCTGACGCAT'),
-        ('ins', 'CATTGGTCGGGGATTTCTGA'),
-        ('ins', 'TCTGCCGATTCATTGGTGCAGACTATCGGGGATTTCTGATGCA'),
+        #('ins', 'CATTGGTCGGGGATTTCTGA'),
+        #('ins', 'TCTGCCGATTCATTGGTGCAGACTATCGGGGATTTCTGATGCA'),
         ('del', 1),
         ('del', 2),
         ('del', 3),
@@ -178,8 +178,8 @@ def sample_variant():
         ('del', 5),
         ('del', 6),
         ('del', 10),
-        ('del', 20),
-        ('del', 50),
+        #('del', 20),
+        #('del', 50),
         )
 
     r = random.randint(0, len(vars)-1)
@@ -198,17 +198,17 @@ def define_variants(settings):
     print('bases between variants: {}'.format(bases_between_variants))
 
     settings['sampled_vars'] = {}
-    with open(settings['target_bed']) as regions:
+    with open(settings['sorted_bed']) as regions:
         for reg in regions:
             _chr, _from, _to = reg.split()[0:3]
-            _from = int(_from) + random.randint(0, 20)
+            _from = int(_from) + random.randint(0, 15)
             _to = int(_to)
             # avoid boundary effects
             if _to - 100 <= _from:
                 logger.error('Please make sure regions are > 100bp')
                 sys.exit(1)
-            _from += 50 
-            _to -= 50
+            _from += 35 
+            _to -= 25
             _pos = range(_from, _to, bases_between_variants)
             _allele1 = [sample_variant() for i in range(len(_pos))]
             _allele2 = [sample_variant() for i in range(len(_pos))]
@@ -227,7 +227,8 @@ def define_variants(settings):
 def add_variants_to_fasta(settings):
     logger.info('adding variants to fasta')
 
-    logger.info("Deep copy Fastas") # only copy and sample from chromosomes where we add variants
+    # only copy and sample from chromosomes where we add variants
+    logger.info("Deep copy Fastas") 
     settings['mod_fasta'] = [{}, {}]
     for _chr in settings['sampled_vars']:
         logger.info("- {}".format(_chr))
@@ -381,9 +382,6 @@ def parse_ref_fasta(settings):
                 print('Parsing fasta chr: {}'.format(this_header))
                 this_chr_fasta = []
                 
-                ## for testing
-                #if len(settings['parsed_fasta']) > 1:
-                #    break
             else:
                 this_chr_fasta.append(line)
                 if not settings['length_of_fasta_line']:
@@ -410,8 +408,11 @@ def create_truth_vcf_and_fastas(settings):
     write_fasta_to_file(settings, 1)
     logger.info('variant simulation complete')
 
-    res = {"truth_vcf": settings['truth_vcf'],
-           "fasta_1": settings['mod_fasta_path_0'],
-           "fasta_2": settings['mod_fasta_path_1']}
+    # delete fasta from memory
+    settings.pop("mod_fasta")
+    settings.pop('sampled_vars')
 
-    return res
+    # convert to consistent module names
+    settings['truth_set_vcf'] = settings['truth_vcf']
+    settings["mod_fasta_1"] = settings['mod_fasta_path_0']
+    settings["mod_fasta_2"] = settings['mod_fasta_path_1']

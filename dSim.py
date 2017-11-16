@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!./venv/bin/python
 
 from lib import ensure_running_in_venv_upon_import
 import sys, copy, argparse, os
@@ -12,7 +12,6 @@ import logging
 # logger will be used for simulator level logging
 # logging will be used for pipeline level logging
 logger = sim_logger.logging.getLogger(__name__)
-
 
 ############################################################
 # main
@@ -81,7 +80,7 @@ def instantiate_pipelines(settings):
             pipelines.append(p)
     return pipelines
 
-def run_this_pipeline(p, result_queue):
+def run_this_pipeline(p, result_queue=None):
     try:     
         p.run()
         state = "COMPLETED"
@@ -96,14 +95,25 @@ def run_this_pipeline(p, result_queue):
         p.logger.error(msg, exc_info=True)
         state = "UNEXPECTED FAIL"
 
-    result_queue.put((p.name, p.dataset_name, state))
+    if result_queue:
+        result_queue.put((p.name, p.dataset_name, state))
 
-def run_pipelines(pipelines):
+def run_pipelines(pipelines, run_serial):
     # run processes in parallel
     result_queue = Queue()
-    MAX_PROCESSES = 5
+    MAX_PROCESSES = 2
     logger.info("\nRUNNING PIPELINES\n")    
     processes = []
+
+    # run serial
+    if run_serial:
+        logger.info("Running in serial")
+        for pipeline in pipelines:
+            run_this_pipeline(pipeline)
+        return 0
+
+    # run parallel
+    logger.info("Running in parallel")
     for pipeline in pipelines:
         p = Process(target=run_this_pipeline, args=(pipeline, result_queue))
         p.start()
@@ -126,9 +136,9 @@ def run_pipelines(pipelines):
 
 ############################################################
 # main
-def main(settings):
+def main(settings, run_serial):
     pipelines_to_run = instantiate_pipelines(settings)
-    return run_pipelines(pipelines_to_run)
+    return run_pipelines(pipelines_to_run, run_serial)
     
 
 ############################################################
@@ -137,11 +147,11 @@ if __name__ == '__main__':
     """
     parser = argparse.ArgumentParser()
     parser.add_argument('-r', '--run_settings', action='store', required=True)
+    parser.add_argument('-s', '--run_serial', action='store_true', help='Default run parallel')
     args = parser.parse_args()
 
     logger.info("\nINPUT SETTINGS\n")
     settings = Settings(args.run_settings)
     settings.print_settings()
-    main(settings)
-
+    main(settings, args.run_serial)
 

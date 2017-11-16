@@ -9,16 +9,16 @@ class AltContig(PipelinesBase):
     modules = [AltContigVCF, Pirs]  # AltContigPirsTruthSam]
 
 class CNV_Exomes(PipelinesBase):
-    modules = [CNVExomeModFastas, Capsim]
+    modules = [RSVSIM_VCF, ChrTrimmer, VCF2Fastas, Capsim]
 
 class CNV_WHGs(PipelinesBase):
-    modules = [RSVSIM_VCF, VCF2Fastas, Pirs]
+    modules = [RSVSIM_VCF, ChrTrimmer, VCF2Fastas, Pirs]
 
 class Normal(PipelinesBase):
-    modules = [CleanVCF, VCF2Fastas, Pirs]
+    modules = [CleanVCF, ChrTrimmer, VCF2Fastas, Pirs]
 
 class Tumor(PipelinesBase):
-    modules = [TumorHead, VCF2Fastas, Pirs_Tumor]
+    modules = [ChrTrimmer, VCF2BamsurgeonBed, Bamsurgeon]
 
 class Test(PipelinesBase):
     modules = [TestMod]

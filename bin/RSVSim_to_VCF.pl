@@ -32,7 +32,9 @@ my $QUAL = 999;
 my $FILTER="PASS";
 my $INFO = "DP=20";
 my $FORMAT = "GT";
-my $GENO = "0/1";
+# my $GENO = "0/1";
+# theo hack
+my $GENO = "1/1";
 
 open (INFILE, $infile) or die $!;
 while (my $line = <INFILE>) {
@@ -60,7 +62,9 @@ while (my $line = <INFILE>) {
    # genotype for current variant
    my $gtype = "0/1";
    $gtype = "1/0" if (rand(1) > 0.5);
-
+   # theo hack
+   $gtype = "1/1";
+   
    if ($var_id =~ /^deletion/) {
 
        $refseq = $seq;
