@@ -20,7 +20,6 @@ from cnv_exomes import create_truth_vcf
 import gzip, copy
 import shutil
 
-
 this_dir_path = os.path.dirname(os.path.realpath(__file__))
 
 
@@ -263,7 +262,7 @@ class RSVSIM_VCF(CNV_Base):
         # copy to NAS
         self.copy_workdir_to_outdir()
 
-        # truth files
+        # truth files ( assumes files are in outdir )
         csv_files = ["deletions.csv", "insertions.csv", "tandemDuplications.csv"]
         self.create_and_submit_truth_tsv_and_vcf(csv_files)
 
@@ -573,14 +572,14 @@ class Pirs(ModuleBase):
     }
     expected_settings = ["PE100", "indels", "gcdep", "mod_fasta_1",
                          "mod_fasta_2", "fasta_file", "coverage"]
-    promised_outputs = ["fq1", "fq2", "read_info"]
-    update_db_keys = ["fq1", "fq2"]
+    promised_outputs = ["fastq_location_1", "fastq_location_2", "read_info"]
+    update_db_keys = ["fastq_location_1", "fastq_location_2"]
 
     def copy_workdir_to_outdir(self, key):
         from_path = self.module_settings[key]
         from_name = os.path.basename(from_path)
         to_path = os.path.join(self.module_settings['outdir'], from_name)
-        shultil.copy(from_path, to_path)
+        shutil.copy(from_path, to_path)
         self.module_settings[key] = to_path
         
 
@@ -625,19 +624,21 @@ class Pirs(ModuleBase):
             fq_list.append(p_res[0])
 
 
-        self.module_settings["fq1"] = fq_list[0]
-        self.module_settings["fq2"] = fq_list[1]
-
-        copy_workdir_to_outdir("fq1")
-        copy_workdir_to_outdir("fq2")
+        self.module_settings["fastq_location_1"] = fq_list[0]
+        self.module_settings["fastq_location_2"] = fq_list[1]
 
         # read info for lift over and truth sam files
-        p = os.path.join(self.module_settings["outdir"], 'pirs*read.info.gz')
+        p = os.path.join(self.module_settings["workdir"], 'pirs*read.info.gz')
         l = glob.glob(p)
         if os.path.isfile(l[0]):
             self.module_settings['read_info'] = l[0]
         else:
             raise PipelineExc("Failed to find read_info: {}".format(p))
+
+        # cp to NAS 
+        self.copy_workdir_to_outdir("fastq_location_1")
+        self.copy_workdir_to_outdir("fastq_location_2")
+        self.copy_workdir_to_outdir("read_info")
 
 
 ###########################################################

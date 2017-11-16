@@ -101,7 +101,7 @@ def run_this_pipeline(p, result_queue=None):
 def run_pipelines(pipelines, run_serial):
     # run processes in parallel
     result_queue = Queue()
-    MAX_PROCESSES = 2
+    MAX_PROCESSES = 5
     logger.info("\nRUNNING PIPELINES\n")    
     processes = []
 

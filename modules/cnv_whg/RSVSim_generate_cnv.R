@@ -27,6 +27,7 @@ option_list = list(
 	help="optional chr to narrow the simulation", default="NULL")
 )
 
+
 opt = parse_args(OptionParser(option_list=option_list))
 required_args_mode1 = c("outdir", "size_ins", "size_del", 
 		    "size_dup", "nr_ins", "nr_dels", "nr_dups", "target_chrs")
@@ -34,16 +35,17 @@ required_args_mode1 = c("outdir", "size_ins", "size_del",
 modes = c(required_args_mode1)
 
 # check mode
-counter = 0
-for (required_args in modes){
-    counter = counter + 1
-    for (n in required_args_mode1){
+print ("Validate options")
+for (required_args in modes)
+   {
+    for (n in required_args_mode1)
+        {
     	if ( opt[n] == "NULL" ) {
     	   msg = paste("parameter:", n, 
 	       "must be provided. See script usage (--help)")
     	   stop(msg)
   	   }
-     mode = counter
+    }
 }
 
 # output directory, should already exist
@@ -55,15 +57,17 @@ size_del = as.numeric(opt$size_del)
 size_dup = as.numeric(opt$size_dup)
  
 nr_ins = as.numeric(opt$nr_ins)
-nr_del = as.numeric(opt$nr_del)
-nr_dup = as.numeric(opt$nr_dup)
+nr_dels = as.numeric(opt$nr_dels)
+nr_dups = as.numeric(opt$nr_dups)
 
 
 ##################################################
 # run cmds
 
 # MODE 1
+print("Run CMD")
 sim = simulateSV(
+        seed=246,
         output=outdir, chrs=c(target_chrs), ins=nr_ins, sizeIns=size_ins, 
     	dels=nr_dels, sizeDels=size_del, dups=nr_dups, sizeDups=size_dup,
         maxDups=10, verbose=TRUE, repeatBias=FALSE, percCopiedIns=1)
