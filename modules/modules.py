@@ -249,14 +249,14 @@ class RSVSIM_VCF(CNV_Base):
         #     $chrom $gencnvdir $sizeins $sizedel $sizedup
         _rsv_script = os.path.join(this_dir_path, "cnv_whg", "RSVSim_generate_cnv.R")
         cmd = _rsv_script
-        cmd += " {workdir}"
-        cmd += " {size_ins}"
-        cmd += " {size_dels}"
-        cmd += " {size_dups}"
-        cmd += " {nr_ins}"
-        cmd += " {nr_dels}"
-        cmd += " {nr_dups}"
-        cmd += " {target_chrs}"
+        cmd += " --outdir {workdir}"
+        cmd += " --size_ins {size_ins}"
+        cmd += " --size_del {size_dels}"
+        cmd += " --size_dup {size_dups}"
+        cmd += " --nr_ins {nr_ins}"
+        cmd += " --nr_dels {nr_dels}"
+        cmd += " --nr_dups {nr_dups}"
+        cmd += " --target_chrs {target_chrs}"
         cmd = cmd.format(**self.module_settings)
         run_process(cmd, self.logger)
 
