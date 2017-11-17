@@ -642,6 +642,65 @@ class Pirs(ModuleBase):
 
 
 ###########################################################
+class Mason(ModuleBase):
+    default_settings = {}
+    expected_settings = ["fasta_file", "coverage", "read_len"]
+    promised_outputs = ["fastq_location_1", "fastq_location_2", "sam_gold"]
+    update_db_keys = ["fastq_location_1", "fastq_location_2", "sam_gold"]   
+
+    def run(self):
+        # run
+        self.logger.info('Mason: simulating reads ...')
+        _log = os.path.join(self.module_settings['outdir'], "mason.log")
+
+        _ref_length = 0
+        with open(self.module_settings["fasta_file"]) as stream:
+            for line in stream:
+                _ref_length += len(line)
+
+        _number_reads = _ref_length * int(self.module_settings["coverage"]) / \
+            int(self.module_settings["read_len"])
+                
+        cmd = "/opt/mason-0.1.2/mason illumina -sq -hn 2 -pi 0.001 -pd 0.001 -pmm 0.004  -s 7451 "
+        cmd += " -N {} -n {} -ll 410 -le 22  ".format(
+            _number_reads, self.module_settings["read_len"])
+        cmd += " -rnp {}".format(self.module_settings["dataset_name"])
+        cmd += " -o {}/{}_pi_0.001_pd_0.001_pmm_0.004_s_7451_N{}_n_{}_ll_410_le_22.fastq".format(
+            self.module_settings["outdir"], 
+            self.module_settings["dataset_name"],
+            _number_reads,
+            self.module_settings["read_len"])
+        cmd += " -mp {} -vcf {}".format(
+            self.module_settings["fasta_file"], self.module_settings["truth_set_vcf"])
+        cmd += " --include-read-information"
+
+        self.logger.info('writing log to: {}'.format(_log))
+        self.logger.info(cmd)
+        run_process(cmd, self.logger, _log)
+
+        # put FQs in DB
+        self.logger.info('Find the mason generated FQs and upload to DB')
+        fq_list = []
+        for i in ["1", "2"]:
+            p = os.path.join(self.module_settings["outdir"], '*{}.fastq'.format(i))
+            p_res = glob.glob(p)
+
+            if len(p_res) != 1: 
+                raise PipelineExc("Too many/few matching fastqs found in "
+                                  "mason output folder: {}".format(p_res))
+            fq_list.append(p_res[0])
+
+        self.logger.info('Find the mason generated sam and upload to DB')                                        
+        p = os.path.join(self.module_settings["outdir"], '*fastq.sam')
+        p_res = glob.glob(p)
+        sam_gold = p_res[0]
+
+        self.module_settings["fastq_location_1"] = fq_list[0]
+        self.module_settings["fastq_location_2"] = fq_list[1]
+        self.module_settings["sam_gold"] = sam_gold
+
+
+###########################################################
 class Pirs_Tumor(ModuleBase):
     default_settings = {
         "insert-len-mean": 400,

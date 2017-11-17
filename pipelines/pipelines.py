@@ -14,6 +14,9 @@ class CNV_Exomes(PipelinesBase):
 class CNV_WHGs(PipelinesBase):
     modules = [RSVSIM_VCF, ChrTrimmer, VCF2Fastas, Pirs]
 
+class Mason(PipelinesBase):
+    modules = [CleanVCF, ChrTrimmer, Mason]
+
 class Normal(PipelinesBase):
     modules = [CleanVCF, ChrTrimmer, VCF2Fastas, Pirs]
 

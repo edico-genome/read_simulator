@@ -1,0 +1,10 @@
+logging to /home/theoh/git/read_simulator/lib/../logs/simulator_2017_11_16__20_08_42.log
+{'name': u'Mason_clean_reads_chr20', 'set_x': 'ref_type', 'value': u'hg19'}
+{'name': u'Mason_clean_reads_chr20',
+ 'set_x': 'truth_set_vcf',
+ 'value': u'/mnt/archive/sim_data/dSim/Mason_clean_reads_chr20/CleanVCF/truth.vcf'}
+{'name': u'Mason_clean_reads_chr20', 'set_x': 'gold_roc_flag', 'value': 1}
+{'name': u'Mason_clean_reads_chr20',
+ 'set_x': 'truth_set_vcf',
+ 'value': u'/mnt/archive/sim_data/dSim/Mason_clean_reads_chr20/ChrTrimmer/chr_chr20.vcf.gz'}
+- Mason      Mason_clean_reads_chr20             HANLDED FAIL   

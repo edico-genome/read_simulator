@@ -1,0 +1,14 @@
+[
+  {
+    "num_runs": 1,
+    "pipeline_name": "Mason",
+    "dataset_name": "Mason_clean_reads_chr20",
+    "reference": "hg19",
+    "outdir": "/mnt/archive/sim_data/dSim",
+    "workdir": "/staging/tmp/mason",
+    "shared_dir": "/staging/tmp/mason",
+    "target_chrs": "chr20",
+    "coverage": 30, 
+    "read_len": 101
+  }
+]
