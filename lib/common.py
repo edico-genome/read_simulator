@@ -232,3 +232,19 @@ def remove_contig_name_descriptions(_module):
 
     _module.lock.release()
     _module.module_settings["fasta_file"] = new_fasta
+
+
+###########################################################
+def sort_target_region_bed(_module):
+    sorted_bed = os.path.join(_module.module_settings["outdir"],
+                              "target_sorted.bed")
+    cmd = "sort -V -k1,1 -k2,2g {} | grep -v GL > {}".format(
+        _module.module_settings["target_region_bed"], sorted_bed)
+    
+    try:
+        _module.logger.info(cmd)
+        subprocess.check_call(cmd, shell=True, executable='/bin/bash')
+    except Exception as e:
+        raise PipelineExc(e)
+        
+    _module.module_settings["sorted_bed"] = sorted_bed

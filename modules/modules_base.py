@@ -3,6 +3,7 @@ A module defines a unit of work ( creating a truth VCF/ fasta etc )
 """
 
 import os, sys, logging, copy
+import shutil
 from lib.common import PipelineExc, parse_ht_config
 from lib.common import MPdb
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -96,8 +97,12 @@ class ModuleBase(object):
         """
         for _d in ['workdir', 'outdir']:
             _dir = self.module_settings[_d]
+
+            # start with clean dir
             if os.path.isdir(_dir):
-                continue
+                shutil.rmtree(_dir)
+                # continue
+
             try:
                 self.logger.info("Create {}: {}".format(_d, _dir))
                 os.makedirs(_dir)

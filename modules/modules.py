@@ -12,13 +12,16 @@ from lib.common import MPdb
 from lib.common import PipelineExc, run_process
 from lib.common import trim_fasta, trim_vcf, trim_bam
 from lib.common import remove_contig_name_descriptions
+from lib.common import sort_target_region_bed
 from lib import bamsurgeon_functions
 from lib import bcftools_functions
+from lib import vlrd_create_vcf
 from enum import Enum
 from vlrd import vlrd_functions
 from cnv_exomes import create_truth_vcf
 import gzip, copy
 import shutil
+from collections import Counter
 
 this_dir_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -164,6 +167,85 @@ class ChrTrimmer(ModuleBase):
             self.promised_outputs.append("dragen_BAM")
             self.update_db_keys.append("dragen_BAM")
             trim_bam(self)
+
+###########################################################
+class FastaTrimmer(ModuleBase):
+    default_settings = {}
+    expected_settings = ["target_chrs", "shared_dir"]
+    promised_outputs = ["fasta_file"]
+
+    def run(self):
+        self.get_dataset_ref()
+
+        # make sure we have a clean fasta
+        remove_contig_name_descriptions(self)
+
+        if not self.module_settings.get("target_chrs", None):
+            self.logger.info("Use full FASTA for simulation")
+            return 
+
+        # if we should only use a subset (e.g. chr20) 
+        # of the input fasta/ vcf for speed
+        self.logger.info("Trim FASTA to small chromosome")
+        trim_fasta(self)
+
+
+###########################################################
+class BedTrimmer(ModuleBase):
+    default_settings = {}
+    expected_settings = ["target_chrs", "target_region_bed"]
+    promised_outputs = ["target_region_bed"]
+    update_db_keys = ["target_region_bed"]
+
+    def run(self):
+
+        # should we only use a subset (e.g. chr20)?
+        target_chrs = self.module_settings.get("target_chrs", None)
+        if not target_chrs:
+            self.logger.info("Use full bed for simulation")
+            return 
+
+        self.logger.info("Trim BED to small chromosome")
+        array_lines = []
+        array_regions = []
+        vlrd_mode = False
+
+        with open(self.module_settings["target_region_bed"]) as stream:          
+            for line in stream:
+                if line.split()[0] not in target_chrs:
+                    continue
+                
+                array_lines.append(line)
+                if len(line.split()) == 5:
+                    array_regions.append(line.split()[3])
+                    vlrd_mode = True
+
+        # is this a vlrd bed? then we should only keep paired regions
+        # import pdb; pdb.set_trace()
+        if vlrd_mode:
+            hist = Counter(array_regions) # e.g. {"2": 3, "54": 3}
+            regions_to_keep = []
+            for key in hist:
+                if hist[key] == 2:
+                    regions_to_keep.append(key)
+            regions_to_keep = set(regions_to_keep)
+
+            for i in reversed(range(0,len(array_lines))):
+                if array_lines[i].split()[3] not in regions_to_keep:
+                    array_lines.pop(i)
+
+        if not array_lines:
+            raise PipelineExc("Empty target bed")
+
+        # write results
+        new_target_bed = os.path.join(self.module_settings['outdir'],
+            'trimmed_target_bed.txt')
+        with open(new_target_bed, 'w') as stream:
+            for line in array_lines:
+                stream.write(line)
+                              
+        # update results
+        self.module_settings["target_region_bed"] = new_target_bed
         
 
 
@@ -355,7 +437,7 @@ class Capsim(ModuleBase):
 
 
 ###########################################################
-class VLRDVCF(ModuleBase):
+class VLRD_VCF_FASTA(ModuleBase):
     default_settings = {}
     expected_settings = ["varrate", "target_region_bed"]
     promised_outputs = ["mod_fasta_1", "mod_fasta_2", "fasta_file",
@@ -364,25 +446,23 @@ class VLRDVCF(ModuleBase):
     # but use the sorted bed for simulations 
     update_db_keys = ["target_region_bed", "truth_set_vcf"]
 
-
-    def sort_target_region_bed(self):
-        sorted_bed = os.path.join(self.module_settings["outdir"],
-            "target_sorted.bed")
-        cmd = "sort -V -k1,1 -k2,2g {} | grep -v GL > {}".format(
-            self.module_settings["target_region_bed"], sorted_bed)
-
-        try:
-            self.logger.info(cmd)
-            subprocess.check_call(cmd, shell=True, executable='/bin/bash')
-        except Exception as e:
-            raise PipelineExc(e)
-
-        self.module_settings["sorted_bed"] = sorted_bed
-
     def run(self):
         self.get_dataset_ref()
-        self.sort_target_region_bed()
+        sort_target_region_bed(self)
         vlrd_functions.create_truth_vcf_and_fastas(self.module_settings)
+
+
+###########################################################
+class VLRD_VCF(ModuleBase):
+    default_settings = {}
+    expected_settings = ["varrate", "target_region_bed"]
+    promised_outputs = ["truth_set_vcf"]
+    update_db_keys = ["target_region_bed", "truth_set_vcf"]
+
+    def run(self):
+        sort_target_region_bed(self)
+        # the module setings will be updated
+        vlrd_create_vcf.create_truth_vcf(self.module_settings)
 
 
 ###########################################################
@@ -661,11 +741,13 @@ class Mason(ModuleBase):
         _number_reads = _ref_length * int(self.module_settings["coverage"]) / \
             int(self.module_settings["read_len"])
                 
-        cmd = "/opt/mason-0.1.2/mason illumina -sq -hn 2 -pi 0.001 -pd 0.001 -pmm 0.004  -s 7451 "
+        cmd = "/opt/mason-0.1.2/mason illumina -sq -hn 2 -pi 0.001 "
+        cmd += " -pd 0.001 -pmm 0.004  -s 7451 "
         cmd += " -N {} -n {} -ll 410 -le 22  ".format(
             _number_reads, self.module_settings["read_len"])
         cmd += " -rnp {}".format(self.module_settings["dataset_name"])
-        cmd += " -o {}/{}_pi_0.001_pd_0.001_pmm_0.004_s_7451_N{}_n_{}_ll_410_le_22.fastq".format(
+        cmd += " -o {}/{}_pi_0.001_pd_0.001_pmm_0.004_s_7451_N{}_n_{}_ll_410_le_22.fastq" \
+        "".format(
             self.module_settings["outdir"], 
             self.module_settings["dataset_name"],
             _number_reads,
@@ -893,5 +975,3 @@ class TestMod(ModuleBase):
     def run(self):
         self.module_settings["test"] = "test"
         self.module_settings["test_out"] = "test_out"
-
-

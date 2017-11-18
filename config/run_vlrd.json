@@ -1,5 +1,20 @@
 [
   {
+    "num_runs": 1,
+    "pipeline_name": "VLRD_mason",
+    "dataset_name": "vlrd_normalnoise_errorrate_hg19_0.005_mason",
+    "reference": "hg19",
+    "outdir": "/mnt/archive/sim_data/dSim",
+    "workdir": "/staging/tmp",
+    "varrate": 0.005,
+    "target_region_bed": "/mnt/archive/sim_data/vlrd/hg19.SegDupTable_sorted_contigFiltered.txt",
+    "target_chrs": "chr1",
+    "shared_dir": "/staging/tmp",
+    "coverage" : "30",
+    "read_len": "101"
+  }
+  , 
+  {
     "num_runs": 0,
     "pipeline_name": "VLRD",
     "dataset_name": "vlrd_normalnoise_errorrate_hs37d5_0.005_2",
@@ -11,7 +26,7 @@
   }
   ,
   {
-    "num_runs": 1,
+    "num_runs": 0,
     "pipeline_name": "VLRD",
     "dataset_name": "vlrd_baylor_varRate_0.02",
     "reference": "hs37d5",

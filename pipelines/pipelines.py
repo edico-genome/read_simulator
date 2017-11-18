@@ -3,7 +3,10 @@ from pipelines_base import PipelinesBase
 from modules.modules import *
 
 class VLRD(PipelinesBase):
-    modules = [VLRDVCF, Pirs]
+    modules = [VLRD_VCF_FASTA, Pirs]
+
+class VLRD_mason(PipelinesBase):
+    modules = [FastaTrimmer, BedTrimmer, VLRD_VCF, VCF2Fastas, Mason]
 
 class AltContig(PipelinesBase):
     modules = [AltContigVCF, Pirs]  # AltContigPirsTruthSam]
