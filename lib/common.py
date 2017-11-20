@@ -20,37 +20,59 @@ class MPdb(pdb.Pdb):
 
 
 ###########################################################
-def run_process(cmd, _logger, outfile=None):
+def run_process(cmd, _logger, outfile=None, _cwd=None):
     """ helper function to run cmd """
+    output = None
 
     if not isinstance(cmd, list):
         cmd = cmd.split()
     arguments = cmd
+    arguments = [ str(i) for i in arguments ]
 
     _logger.info("Run cmd: {}".format(" ".join(arguments)))
 
-    if outfile:
-        with open(outfile, 'w') as f:
-            process = subprocess.Popen(
-                arguments,
-                stdout=f)
-            process.wait()
-            _logger.info("wrote output to: {}".format(outfile))
-    else:
-        process = subprocess.Popen(
-            arguments,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    # try: 
+    if True:
+        if outfile:
+            with open(outfile, 'w') as f:
+                if _cwd:
+                    process = subprocess.Popen(
+                        arguments,
+                        stdout=f,
+                        cwd="%r" %_cwd)
+                else:
+                    process = subprocess.Popen(
+                        arguments,
+                        stdout=f)
 
-    process.wait()
-    output, error = process.communicate()
-    _logger.info(output)
-    
-    _logger.info("cmd exit code: {}".format(process.returncode))
-    if process.returncode:
-        _logger.error("cmd: {}".format(" ".join(arguments)))
-        raise PipelineExc("bash cmd failed: {}".format(error))
+                process.wait()
+                _logger.info("wrote output to: {}".format(outfile))
+        else:
+            if _cwd:
+                process = subprocess.Popen(
+                    arguments,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    cwd="%s" %_cwd)
+            else:
+                process = subprocess.Popen(
+                    arguments,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT)
+
+        process.wait()
+        output, error = process.communicate()
+        _logger.info("Cmd output: {}".format(output))
+        _logger.info("cmd exit code: {}".format(process.returncode))
+
+        if process.returncode:
+            _logger.error("cmd: {}".format(" ".join(arguments)))
+            raise PipelineExc("bash cmd failed: {}".format(error))
+    #except:
+    #    raise PipelineExc("cmd: failed, with no return code")
 
     return output
+
 
 
 ###########################################################
@@ -79,17 +101,17 @@ def trim_fasta(_module):
     target_chrs = _module.module_settings['target_chrs']
 
     _module.logger.info("Trim Fasta for chromosome(s): {}".format(target_chrs))
+
+    # trim fasta
     # workdir - no need to keep this fasta
     out_fasta = os.path.join(
         _module.module_settings['workdir'],
         "chr_{}.fa".format(target_chrs))
 
-    # trim the fasta
     cmd = ["samtools", "faidx",
            _module.module_settings['fasta_file'],
            target_chrs]
-    
-    run_process(cmd, _module.logger, out_fasta)
+    run_process(cmd, _module.logger, out_fasta)    
 
     # index the new fasta
     cmd = ["samtools", "faidx", out_fasta]

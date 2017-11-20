@@ -6,14 +6,15 @@ set -e
 #####################################################
 # constants
 
-JAPSA_CAPSIM="/home/gavinp/.usr/local/bin/jsa.sim.capsim"
+BASE="/mnt/archive/sim_data/ref_data/capsim"
+JAPSA_CAPSIM="$BASE/jsa.sim.capsim"
 
 # list of processed probes files to select from
 # "/home/gavinp/Downloads/sequencing_kits/S03723314/S03723314_Probes_chr20.txt.fa", \
 PROBE_FILES=(
-    "/home/gavinp/Downloads/sequencing_kits/SeqCapEZ/exome_probes.txt", \
-    "/home/gavinp/Downloads/sequencing_kits/SeqCapEZ/results3.txt", \
-    "/home/gavinp/Downloads/sequencing_kits/S07604624/results.txt")
+    "$BASE/SeqCapEZ/exome_probes.txt", \
+    "$BASE/results3.txt", \
+    "$BASE/results.txt")
 
 #seed random generator
 RANDOM=$$$(date +%s)

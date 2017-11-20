@@ -12,7 +12,7 @@ class AltContig(PipelinesBase):
     modules = [AltContigVCF, Pirs]  # AltContigPirsTruthSam]
 
 class CNV_Exomes(PipelinesBase):
-    modules = [RSVSIM_VCF, ChrTrimmer, VCF2Fastas, Capsim]
+    modules = [FastaTrimmer, BedTrimmer, CNVgdbVCF, VCF2Fastas, Capsim]
 
 class CNV_WHGs(PipelinesBase):
     modules = [RSVSIM_VCF, ChrTrimmer, VCF2Fastas, Pirs]

@@ -6,8 +6,8 @@ import os
 # CONSTANTS
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
-rsv_script = os.path.join(script_dir, "unified_rsv_table.sh")
-to_vcf_script = os.path.join(script_dir, "RSVSim_to_VCF.pl")
+rsv_script = os.path.join(script_dir, "../bin", "unified_rsv_table.sh")
+to_vcf_script = os.path.join(script_dir, "../bin", "RSVSim_to_VCF.pl")
 
 
 def run_cmd(cmd, _logger):
@@ -78,7 +78,10 @@ def create_truth_files(fasta, outdir, csv_files, _logger):
     _logger.info("VCF Truth: {}".format(vcf))
 
     # create truth tsv
-    vcf_to_truth_table_script = os.path.join(script_dir, "rsvsim.vcf_to_cnv_truth_table.pl")
+    vcf_to_truth_table_script = os.path.join(
+        script_dir, "../bin",
+        "rsvsim.vcf_to_cnv_truth_table.pl")
+
     tsv = os.path.join(outdir, "RSVsim_truth.tsv")
     cmd = "{} {} > {}".format(vcf_to_truth_table_script, vcf, tsv)
     run_cmd(cmd, _logger)

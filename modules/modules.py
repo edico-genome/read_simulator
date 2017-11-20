@@ -16,9 +16,10 @@ from lib.common import sort_target_region_bed
 from lib import bamsurgeon_functions
 from lib import bcftools_functions
 from lib import vlrd_create_vcf
+from lib import rsvsim_create_vcf
 from enum import Enum
 from vlrd import vlrd_functions
-from cnv_exomes import create_truth_vcf
+
 import gzip, copy
 import shutil
 from collections import Counter
@@ -63,18 +64,18 @@ class CNV_Base(ModuleBase):
     def create_and_submit_truth_tsv_and_vcf(self, csv_files):
         """ create truth files """
 
+        self.logger.info("RSVSim create truth files")
         csv_files = [os.path.join(self.module_settings["outdir"], csv) for csv in csv_files]
         
         for f in csv_files:
             assert os.path.isfile(f), "file: {} does not exist".format(f)
 
         try:
-            truth_vcf, truth_tsv = create_truth_vcf.create_truth_files(
+            truth_vcf, truth_tsv = rsvsim_create_vcf.create_truth_files(
                 self.module_settings["fasta_file"],
                 self.module_settings['outdir'], csv_files, self.logger)
         except Exception as e:
-            self.logger.error("Failed to create truth files: {}".format(e), exc_info=True)
-            raise PipelineExc()
+            raise PipelineExc("Failed to create truth files: {}".format(e))
 
         # update db
         self.module_settings['cnv_truth'] = truth_tsv
@@ -198,9 +199,11 @@ class BedTrimmer(ModuleBase):
     update_db_keys = ["target_region_bed"]
 
     def run(self):
-
         # should we only use a subset (e.g. chr20)?
         target_chrs = self.module_settings.get("target_chrs", None)
+        if target_chrs:
+            target_chrs = str(target_chrs)
+
         if not target_chrs:
             self.logger.info("Use full bed for simulation")
             return 
@@ -212,9 +215,15 @@ class BedTrimmer(ModuleBase):
 
         with open(self.module_settings["target_region_bed"]) as stream:          
             for line in stream:
-                if line.split()[0] not in target_chrs:
-                    continue
+                # target_chrs can be an array or single string
+                if type(target_chrs) in [unicode, str]:
+                    if line.split()[0] != target_chrs:
+                        continue
+                else:
+                    if line.split()[0] not in target_chrs:
+                        continue
                 
+                # lines to keep
                 array_lines.append(line)
                 if len(line.split()) == 5:
                     array_regions.append(line.split()[3])
@@ -238,15 +247,16 @@ class BedTrimmer(ModuleBase):
             raise PipelineExc("Empty target bed")
 
         # write results
-        new_target_bed = os.path.join(self.module_settings['outdir'],
+        new_target_bed = os.path.join(
+            self.module_settings['outdir'],
             'trimmed_target_bed.txt')
+
         with open(new_target_bed, 'w') as stream:
             for line in array_lines:
                 stream.write(line)
                               
         # update results
         self.module_settings["target_region_bed"] = new_target_bed
-        
 
 
 ###########################################################
@@ -354,66 +364,58 @@ class RSVSIM_VCF(CNV_Base):
   
 
 ###########################################################
-class CNVExomeModFastas(CNV_Base):
+class CNVgdbVCF(CNV_Base):
     default_settings = {}
     expected_settings = [
-        "nHomozygousDeletions",
-        "nHeterozygousDeletions",
-        "nTandemDuplications", "maxEventLength",
-        "minEventLength", "outdir", "workdir",
-        "cnv_db", "target_bed", "shared_dir"]
-    promised_outputs = []
+        "nrDeletions",
+        "nrDuplications",
+        "outdir",
+        "target_chrs",
+        "target_region_bed"]
+    promised_outputs = ['cnv_truth', 'truth_set_vcf']
 
     def run(self):
         self.get_refs()
         remove_contig_name_descriptions(self)
 
         # Gavin's script to create exome variants
-        _mod_fastas_script = os.path.join(this_dir_path,
-            "cnv_exomes", "RSVSim_generate_modified_genome.R")
+        _mod_fastas_script = os.path.join(
+            this_dir_path,
+            "..", "bin", "cnv_exome_variant_simulator.R")
 
-        cmd =_mod_fastas_script
-        cmd += " --nHomozygousDeletions {nHomozygousDeletions}"
-        cmd += " --nHeterozygousDeletions {nHeterozygousDeletions}"
-        cmd += " --nTandemDuplications {nTandemDuplications}"
-        cmd += " --maxEventLength {maxEventLength}"
-        cmd += " --minEventLength {minEventLength}"
+        _log = os.path.join(self.module_settings['outdir'], "rsvsim.log")
+
+        cmd = "/usr/bin/Rscript "
+        cmd += _mod_fastas_script
+        cmd += " --nrDeletions {nrDeletions}"
+        cmd += " --nrDuplications {nrDuplications}"
         cmd += " --outdir {outdir}"
-        cmd += " --fa_file {fasta_file}"
-        cmd += " --cnv_db {cnv_db}"
-        if self.module_settings.get("target_chrs", None):
-            cmd += " --target_chrs {target_chrs}"
-        cmd += " --target_bed {target_bed}"
+        cmd += " --fasta {fasta_file}"
+        cmd += " --target_chrs {target_chrs}"
+        cmd += " --target_bed {target_region_bed}"
+        cmd += " --DGV {DGV}"
         cmd = cmd.format(**self.module_settings)
-        run_process(cmd, self.logger)
+        run_process(cmd, self.logger, outfile=None, 
+                    _cwd=self.module_settings['outdir'])
+        
+        self.logger.info("RSVSim completed")
 
         # create truth
-        csv_files = ["insertions1.csv", "insertions2.csv",
-                     "deletions1.csv", "deletions2.csv",
-                     "tandemDuplications1.csv", "tandemDuplications2.csv"]
+        csv_files = ["deletions.csv", "tandemDuplications.csv"]
         self.create_and_submit_truth_tsv_and_vcf(csv_files)
-
-        # get modified fasta files
-        fastas = {"contig-1": "{outdir}/genome_rearranged1.fasta".format(**self.module_settings),
-                  "contig-2": "{outdir}/genome_rearranged2.fasta".format(**self.module_settings)}
-
-        # update target bed
-        self.add_contig_names_to_target_bed()
-        self.logger.info("renamed target bed: {}".format(
-            self.module_settings['target_bed_contigs_named']))
-        self.db_api.upload_to_db('cnv_target_bed', self.module_settings['target_bed_contigs_named'])
 
 
 ###########################################################
 class Capsim(ModuleBase):
     default_settings = {}
-    expected_settings = ["number-of-reads", "read-len", "fragment-size", "mod_fasta_1", "mod_fasta_2"]
+    expected_settings = ["number-of-reads", "read-len", "fragment-size", 
+                         "mod_fasta_1", "mod_fasta_2"]
     promised_outputs = []
 
     def run(self):
         # run
         self.logger.info('Capsim: simulating reads ...')
-        script_path = os.path.join(this_dir_path, "cnv_exomes", "run_capsim.sh")
+        script_path = os.path.join(this_dir_path, "../bin", "run_capsim.sh")
         log = os.path.join(self.module_settings['outdir'], "capsim.log")
         self.module_settings['capsim_log'] = log
 
@@ -878,7 +880,7 @@ class Pirs_Tumor(ModuleBase):
 
 
 ###########################################################
-class AltContigPirsTruthSam(ModuleBase):
+class PirsTruthSam(ModuleBase):
     default_settings = {}
     expected_settings = []
     promised_outputs = []

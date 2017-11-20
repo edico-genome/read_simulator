@@ -8,7 +8,7 @@
     "workdir": "/staging/tmp",
     "varrate": 0.005,
     "target_region_bed": "/mnt/archive/sim_data/vlrd/hg19.SegDupTable_sorted_contigFiltered.txt",
-    "target_chrs": "chr1",
+    "target_chrs": "chr20",
     "shared_dir": "/staging/tmp",
     "coverage" : "30",
     "read_len": "101"

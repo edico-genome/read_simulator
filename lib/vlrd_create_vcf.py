@@ -307,7 +307,6 @@ def create_truth_vcf(settings):
     """
 
     settings['var_info_for_vcf'] = {}
-    settings['mod_fasta'] = []
 
     logger.info('\nVLRD SIMULATING VARIANTS ...')
     parse_ref_fasta(settings)

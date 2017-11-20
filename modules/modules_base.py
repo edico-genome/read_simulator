@@ -78,7 +78,7 @@ class ModuleBase(object):
         for key in self.expected_settings:
             # if neither default nor provided, then assert
             if key not in self.module_settings:
-                raise PipelineExc("Missing setting: {}".format(key))
+                raise PipelineExc("Module: {}, missing setting: {}".format(self.name, key))
 
         # workdir/ outdir module name
         for d in ["workdir", "outdir"]:
@@ -101,7 +101,6 @@ class ModuleBase(object):
             # start with clean dir
             if os.path.isdir(_dir):
                 shutil.rmtree(_dir)
-                # continue
 
             try:
                 self.logger.info("Create {}: {}".format(_d, _dir))
