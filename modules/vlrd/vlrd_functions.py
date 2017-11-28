@@ -132,7 +132,9 @@ def sample_variant():
         ('snp', 'G'),
         ('snp', 'C'),
         ('snp', 'A'),
-        ('snp', 'T'),
+        ('snp', 'T'))
+
+    """
         ('snp', 'G'),
         ('snp', 'C'),
         ('snp', 'A'),
@@ -181,6 +183,7 @@ def sample_variant():
         #('del', 20),
         #('del', 50),
         )
+    """
 
     r = random.randint(0, len(vars)-1)
     return vars[r]

@@ -94,6 +94,14 @@ class PipelinesBase(object):
 
     def run(self):
         self.logger.info("\nPIPELINE: {}".format(self.name))
+        # are there any values we just need to upload to the dataset db?
+        # these keys are not intended to be used be modules
+        for_upload = self.pipeline_settings.get("for_upload", None)
+        if for_upload:
+            for key in for_upload:
+                self.db_api.upload_to_db(key, for_upload[key])
+                
+        # run modules
         for inst in self.module_instances:
             inst.before_run()
             inst.run()

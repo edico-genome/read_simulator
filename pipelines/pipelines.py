@@ -3,16 +3,19 @@ from pipelines_base import PipelinesBase
 from modules.modules import *
 
 class VLRD(PipelinesBase):
-    modules = [VLRD_VCF_FASTA, Pirs]
+    modules = [FastaTrimmer, VLRD_VCF, VCF2Fastas, Pirs]
 
 class VLRD_mason(PipelinesBase):
     modules = [FastaTrimmer, BedTrimmer, VLRD_VCF, VCF2Fastas, Mason]
 
 class AltContig(PipelinesBase):
-    modules = [AltContigVCF, Pirs]  # AltContigPirsTruthSam]
+    modules = [AltContigVCF, Pirs]
 
 class CNV_Exomes(PipelinesBase):
-    modules = [FastaTrimmer, BedTrimmer, CNVgdbVCF, VCF2Fastas, Capsim]
+    modules = [PrepCNVprobes, FastaTrimmer, CNVgdbVCF, VCF2Fastas, Capsim]
+
+class CNV_WHGs_Mixed(PipelinesBase):
+    modules = [FastaTrimmer, BedTrimmer, CNVgdbVCF, VCF2Fastas, Pirs]
 
 class CNV_WHGs(PipelinesBase):
     modules = [RSVSIM_VCF, ChrTrimmer, VCF2Fastas, Pirs]
@@ -21,7 +24,7 @@ class Mason(PipelinesBase):
     modules = [CleanVCF, ChrTrimmer, Mason]
 
 class Normal(PipelinesBase):
-    modules = [CleanVCF, ChrTrimmer, VCF2Fastas, Pirs]
+    modules = [CleanVCF, BedTrimmer, VCF2Fastas, Pirs]
 
 class Tumor(PipelinesBase):
     modules = [ChrTrimmer, VCF2BamsurgeonBed, Bamsurgeon]

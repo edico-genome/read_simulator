@@ -6,15 +6,11 @@ set -e
 #####################################################
 # constants
 
-BASE="/mnt/archive/sim_data/ref_data/capsim"
+BASE="/home/gavinp/.usr/local/bin/"
 JAPSA_CAPSIM="$BASE/jsa.sim.capsim"
 
 # list of processed probes files to select from
 # "/home/gavinp/Downloads/sequencing_kits/S03723314/S03723314_Probes_chr20.txt.fa", \
-PROBE_FILES=(
-    "$BASE/SeqCapEZ/exome_probes.txt", \
-    "$BASE/results3.txt", \
-    "$BASE/results.txt")
 
 #seed random generator
 RANDOM=$$$(date +%s)
@@ -29,16 +25,18 @@ usage: $(basename $0)
   -o                              outdir
   -1                              modified fasta1
   -2                              modified fasta2
+  -p                              probe_file
 EOF
 )
 
-while getopts ':1:2:n:l:f:o:' opt ; do
+while getopts ':1:2:n:l:f:o:p:' opt ; do
     case "$opt" in
     1) mod_fasta1="${OPTARG}" ;;
     2) mod_fasta2="${OPTARG}" ;;	
     n) N_READS="${OPTARG}" ;;
     l) READ_LENGTH="${OPTARG}" ;;
     f) FRAG_LENGTH="${OPTARG}" ;;
+    p) probe_file="${OPTARG}" ;;
     o) outdir="${OPTARG}"
        if [[ ! -d $outdir  ]]; then
 	   echo "Outdir: $outdir does must exist"
@@ -55,7 +53,7 @@ done
 echo ""
 echo "SETTINGS"
 echo "=============================="
-for key in mod_fasta1 mod_fasta2 N_READS READ_LENGTH FRAG_LENGTH outdir; do
+for key in mod_fasta1 mod_fasta2 N_READS READ_LENGTH FRAG_LENGTH outdir probe_file; do
     eval value=\${$key}
     if [[ -z "$value" ]]; then
 	echo "Missing argument: $key"
@@ -85,23 +83,17 @@ function run {
 #####################################################
 # MAIN
 
-
 # avoid nextera - it is not working properly in the 
 # simulator - seems to be a capsim issue, maybe related to length
-selected_probe=${PROBE_FILES[$RANDOM % ${#PROBE_FILES[@]} ]}
 
-echo "Processing $selected_probe "
+echo "Processing $probe_file "
 cmd="bowtie2-build $mod_fasta1 $outdir/bowtie_ref1"; run "$cmd"
 cmd="bowtie2-build $mod_fasta2 $outdir/bowtie_ref2"; run "$cmd"
 
-cmd="bowtie2 --local --very-sensitive-local --mp 8 --rdg 10,8 --rfg 10,8 -k 10000 -f -x $outdir/bowtie_ref1 -U $selected_probe -S $outdir/probes.sam"; run "$cmd"
-
-cmd="bowtie2 --local --very-sensitive-local --mp 8 --rdg 10,8 --rfg 10,8 -k 10000 -f -x $outdir/bowtie_ref2 -U $selected_probe -S $outdir/probes.sam"; run "$cmd"
-
-#bowtie2 --local --fast-local --mp 8 --rdg 10,8 --rfg 10,8 -k 10000 -f -x bowtie_ref -U $selected_probe -S probes.sam # samp9 -> 67575 lines
+cmd="bowtie2 --local --very-sensitive-local --mp 8 --rdg 10,8 --rfg 10,8 -k 10000 -f -x $outdir/bowtie_ref1 -U $probe_file -S $outdir/probes.sam"; run "$cmd"
+cmd="bowtie2 --local --very-sensitive-local --mp 8 --rdg 10,8 --rfg 10,8 -k 10000 -f -x $outdir/bowtie_ref2 -U $probe_file -S $outdir/probes.sam"; run "$cmd"
 
 # cmd="samtools view -b $outdir/probes.sam | samtools sort -o $outdir/probes.bam"; run "$cmd"
-
 cmd="samtools sort $outdir/probes.sam $outdir/probes_sorted"; run "$cmd"
 cmd="samtools index $outdir/probes_sorted.bam"; run "$cmd"
 
@@ -116,13 +108,13 @@ echo "Export PATH : $PATH"
 
 # run for 1st haplotype
 cmd="$JAPSA_CAPSIM --reference $mod_fasta1 $capsim_options --logFile $outdir/capsim1.log "; run "$cmd"
-cmd="mv $outdir/output_1.fastq.gz $outdir/output_ref1_1.fastq.gz"; run "$cmd"
-cmd="mv $outdir/output_2.fastq.gz $outdir/output_ref1_2.fastq.gz"; run "$cmd"
+# cmd="mv $outdir/output_1.fastq.gz $outdir/output_ref1_1.fastq.gz"; run "$cmd"
+# cmd="mv $outdir/output_2.fastq.gz $outdir/output_ref1_2.fastq.gz"; run "$cmd"
 
 # run for 2nd haplotype
-cmd="$JAPSA_CAPSIM --reference $mod_fasta2 $capsim_options --logFile $outdir/capsim2.log "; run "$cmd"
-cmd="mv $outdir/output_1.fastq.gz $outdir/output_ref2_1.fastq.gz"; run "$cmd"
-cmd="mv $outdir/output_2.fastq.gz $outdir/output_ref2_2.fastq.gz"; run "$cmd"
+# cmd="$JAPSA_CAPSIM --reference $mod_fasta2 $capsim_options --logFile $outdir/capsim2.log "; run "$cmd"
+# cmd="mv $outdir/output_1.fastq.gz $outdir/output_ref2_1.fastq.gz"; run "$cmd"
+# cmd="mv $outdir/output_2.fastq.gz $outdir/output_ref2_2.fastq.gz"; run "$cmd"
 
 # reset java
 echo "Reset Java to original version"
@@ -131,14 +123,14 @@ export PATH="$ORIGINAL_PATH"
 
 # merge results
 # fq1
-cmd="cat $outdir/output_ref1_1.fastq.gz $outdir/output_ref2_1.fastq.gz"
-echo "$cmd > $outdir/output_1.fastq.gz"
-$cmd > $outdir/output_1.fastq.gz
+# cmd="cat $outdir/output_ref1_1.fastq.gz $outdir/output_ref2_1.fastq.gz"
+# echo "$cmd > $outdir/capsim_1.fastq.gz"
+# $cmd > $outdir/capsim_1.fastq.gz
 
 # fq2
-cmd="cat $outdir/output_ref1_2.fastq.gz $outdir/output_ref2_2.fastq.gz"
-echo "$cmd > $outdir/output_2.fastq.gz"
-$cmd > $outdir/output_2.fastq.gz
+# cmd="cat $outdir/output_ref1_2.fastq.gz $outdir/output_ref2_2.fastq.gz"
+# echo "$cmd > $outdir/capsim_2.fastq.gz"
+# $cmd > $outdir/capsim_2.fastq.gz
 
 echo "done"
 

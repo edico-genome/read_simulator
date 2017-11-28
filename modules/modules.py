@@ -19,12 +19,78 @@ from lib import vlrd_create_vcf
 from lib import rsvsim_create_vcf
 from enum import Enum
 from vlrd import vlrd_functions
+import random
 
 import gzip, copy
 import shutil
 from collections import Counter
 
 this_dir_path = os.path.dirname(os.path.realpath(__file__))
+
+###########################################################
+class PrepCNVprobes(ModuleBase):
+    default_settings = {}
+    expected_settings = ["target_chrs"]
+    promised_outputs = ["target_region_bed", "exome_probes"]
+    update_db_keys = ["target_region_bed", "cnv_target_bed"]
+
+    def run(self):
+        probes = ["/mnt/archive/sim_data/ref_data/capsim/results.txt"]
+        probes = probes[0]
+        self.logger.info("selected probe file: {}".format(probes))
+
+        # add target chrs info
+        target_chrs = self.module_settings["target_chrs"]
+        assert not isinstance(target_chrs, list)
+        target_chrs = str(target_chrs)
+        target_chrs = "chr{}".format(target_chrs.replace("chr", ""))
+        if not target_chrs in ["chr{}".format(str(i)) for i in range(1,22)]:
+            print "Target chr: {}, not valid selection".format(target_chrs)
+        self.module_settings["target_chrs"] = target_chrs
+
+        # new out files
+        target_region_bed = os.path.join(self.module_settings["outdir"],
+                                         "target_region_bed.txt")
+
+        exome_probes = os.path.join(self.module_settings["outdir"],
+                                    "exome_probes.txt")
+
+        try: 
+            stream_in = open(probes, 'r') 
+            stream_bed_out = open(target_region_bed, 'w')
+            stream_probes_out = open(exome_probes, 'w')
+            
+            line_counter = 0
+            target_header = False
+
+            for line in stream_in:
+                if target_header:
+                    stream_probes_out.write(line)
+                    target_header = False
+                elif self.module_settings["target_chrs"] in line.split()[0]:
+                    target_header = True
+                    # probes file
+                    stream_probes_out.write(line)
+                    # bed
+                    _from, _to = line.split(":")[1].split("-")
+                    stream_bed_out.write("{}\t{}\t{}".format(
+                            self.module_settings["target_chrs"],
+                            _from, _to))
+                    line_counter += 1
+                                         
+        except Exception as e:
+            raise PipelineExc("Failed to create filtered probe files: {}"
+                              "".format(e))
+        finally:
+            stream_in.close()
+            stream_bed_out.close()
+            stream_probes_out.close()
+
+        assert line_counter > 5, 'probes do not match chromosome selection'
+        self.module_settings["target_region_bed"] = target_region_bed
+        self.module_settings["cnv_target_bed"] = target_region_bed
+        self.module_settings["exome_probes"] = exome_probes
+     
 
 
 ###########################################################
@@ -70,12 +136,12 @@ class CNV_Base(ModuleBase):
         for f in csv_files:
             assert os.path.isfile(f), "file: {} does not exist".format(f)
 
-        try:
-            truth_vcf, truth_tsv = rsvsim_create_vcf.create_truth_files(
-                self.module_settings["fasta_file"],
-                self.module_settings['outdir'], csv_files, self.logger)
-        except Exception as e:
-            raise PipelineExc("Failed to create truth files: {}".format(e))
+        #try:
+        truth_vcf, truth_tsv = rsvsim_create_vcf.create_truth_files(
+            self.module_settings["fasta_file"],
+            self.module_settings['outdir'], csv_files, self.logger)
+        #except Exception as e:
+        #    raise PipelineExc("Failed to create truth files: {}".format(e))
 
         # update db
         self.module_settings['cnv_truth'] = truth_tsv
@@ -181,14 +247,13 @@ class FastaTrimmer(ModuleBase):
         # make sure we have a clean fasta
         remove_contig_name_descriptions(self)
 
-        if not self.module_settings.get("target_chrs", None):
+        target_chrs = self.module_settings.get("target_chrs", None)
+        if ( not target_chrs ) or ( target_chrs == "ALL" ):
             self.logger.info("Use full FASTA for simulation")
-            return 
-
-        # if we should only use a subset (e.g. chr20) 
-        # of the input fasta/ vcf for speed
-        self.logger.info("Trim FASTA to small chromosome")
-        trim_fasta(self)
+        else:
+            # if we should only use a subset (e.g. chr20) 
+            self.logger.info("Trim FASTA")
+            trim_fasta(self)
 
 
 ###########################################################
@@ -285,6 +350,7 @@ class VCF2Fastas(ModuleBase):
 
         # use the unmodified fasta to simulate reads if there are no variants
         if not found_a_variant:
+            self.logger.info("No variants added to Fastas")
             self.module_settings["mod_fasta_1"] = self.module_settings["fasta_file"]
             self.module_settings["mod_fasta_2"] = self.module_settings["fasta_file"]
         else:
@@ -294,9 +360,9 @@ class VCF2Fastas(ModuleBase):
 
             for hap in [1, 2]:
                 mod_fasta = os.path.join(
-                    self.module_settings["workdir"], "mod_fasta_{}.fa".format(hap))
+                    self.module_settings["outdir"], "mod_fasta_{}.fa".format(hap))
                 liftover = os.path.join(
-                    self.module_settings["workdir"], "liftover_{}.txt".format(hap))
+                    self.module_settings["outdir"], "liftover_{}.txt".format(hap))
                 options = {
                     "liftover": liftover, 
                     "haplotype": hap, 
@@ -310,7 +376,7 @@ class VCF2Fastas(ModuleBase):
 
                 # update pipeline settings
                 self.module_settings["mod_fasta_{}".format(hap)] = mod_fasta
-                print "create fastad {}".format(hap)
+                print "create fasta {}".format(hap)
 
 
     def run(self):
@@ -367,28 +433,32 @@ class RSVSIM_VCF(CNV_Base):
 class CNVgdbVCF(CNV_Base):
     default_settings = {}
     expected_settings = [
-        "nrDeletions",
-        "nrDuplications",
+        "nr_dels",
+        "nr_dups",
+        "nr_ins",
         "outdir",
         "target_chrs",
         "target_region_bed"]
-    promised_outputs = ['cnv_truth', 'truth_set_vcf']
+    update_db_keys = ["cnv_target_bed"]
+    promised_outputs = ['cnv_truth', 'truth_set_vcf', "cnv_target_bed"]
 
     def run(self):
-        self.get_refs()
-        remove_contig_name_descriptions(self)
+        self.module_settings["DGV"] = "/mnt/archive/sim_data" + \
+            "/ref_data/cnv/GRCh37_hg19_variants_2016-05-15.txt"
 
-        # Gavin's script to create exome variants
+        # update cnv target bed
+        self.module_settings["cnv_target_bed"] = \
+            self.module_settings["target_region_bed"]
+
         _mod_fastas_script = os.path.join(
-            this_dir_path,
-            "..", "bin", "cnv_exome_variant_simulator.R")
+            this_dir_path, "..", "bin", "cnv_exome_variant_simulator.R")
 
         _log = os.path.join(self.module_settings['outdir'], "rsvsim.log")
 
         cmd = "/usr/bin/Rscript "
         cmd += _mod_fastas_script
-        cmd += " --nrDeletions {nrDeletions}"
-        cmd += " --nrDuplications {nrDuplications}"
+        cmd += " --nrDeletions {nr_dels}"
+        cmd += " --nrDuplications {nr_dups}"
         cmd += " --outdir {outdir}"
         cmd += " --fasta {fasta_file}"
         cmd += " --target_chrs {target_chrs}"
@@ -408,9 +478,16 @@ class CNVgdbVCF(CNV_Base):
 ###########################################################
 class Capsim(ModuleBase):
     default_settings = {}
+
     expected_settings = ["number-of-reads", "read-len", "fragment-size", 
                          "mod_fasta_1", "mod_fasta_2"]
-    promised_outputs = []
+
+    promised_outputs =  ["fastq_location_1", "fastq_location_2",
+                         "fastq_offser_override", "fastq_offser_override_detail"]
+
+    update_db_keys = ["fastq_location_1", "fastq_location_2",
+                      "fastq_offser_override", "fastq_offser_override_detail",
+                      "gold_roc_flag"]
 
     def run(self):
         # run
@@ -418,30 +495,38 @@ class Capsim(ModuleBase):
         script_path = os.path.join(this_dir_path, "../bin", "run_capsim.sh")
         log = os.path.join(self.module_settings['outdir'], "capsim.log")
         self.module_settings['capsim_log'] = log
-
+           
+        # build cmd
         cmd = script_path + \
             " -n {number-of-reads}" + \
             " -l {read-len}" + \
             " -f {fragment-size}" + \
             " -o {outdir}" + \
-            " -1 {mod_fasta_1} -2 {mod_fasta_2}"
+            " -1 {mod_fasta_1} -2 {mod_fasta_2}" + \
+            " -p {exome_probes} "
         cmd = cmd.format(**self.module_settings)
+        
         run_process(cmd, self.logger)
 
         # update db with results
         self.logger.info('find the Capsim generated FQs and upload to DB')
         fq_lists = []
         for i in ["1", "2"]:
-            p = os.path.join(self.module_settings["outdir"],
-                             'output_' + i + '.fastq.gz')
+            p = os.path.join(self.module_settings["outdir"], 
+                             'output_%s.fastq.gz' % i)
             fq_lists.append(glob.glob(p))
-        self.db_api.post_reads(fq_lists[0][0], fq_lists[1][0])
+
+        self.module_settings["fastq_location_1"] = fq_lists[0][0]
+        self.module_settings["fastq_location_2"] = fq_lists[1][0]
+        self.module_settings["fastq_offser_override"] = 1
+        self.module_settings["gold_roc_flag"] = 1
+        self.module_settings["fastq_offser_override_detail"] = 33
 
 
 ###########################################################
 class VLRD_VCF_FASTA(ModuleBase):
     default_settings = {}
-    expected_settings = ["varrate", "target_region_bed"]
+    expected_settings = ["varrate"]
     promised_outputs = ["mod_fasta_1", "mod_fasta_2", "fasta_file",
                         "ref_type", "truth_set_vcf"]
     # only update the db with the provided bed 
@@ -450,8 +535,14 @@ class VLRD_VCF_FASTA(ModuleBase):
 
     def run(self):
         self.get_dataset_ref()
-        sort_target_region_bed(self)
-        vlrd_functions.create_truth_vcf_and_fastas(self.module_settings)
+        target_region_bed = self.module_settings.get(
+            "target_region_bed", None)
+
+        if target_region_bed:
+            sort_target_region_bed(self)
+
+        vlrd_functions.create_truth_vcf_and_fastas(
+            self.module_settings)
 
 
 ###########################################################

@@ -24,12 +24,23 @@ deleteOverlaping = function(df){
       end_prev_region = df$end[idx]
     }
   }
-  df = df[,-idx]
+  df = df[-idx,]
   return(df)
 }
 
 get_sub_dataframe = function(df, names, sample_nr){
+		
   df = df[df["variantsubtype"] == names,] 
+  msg0 = paste(names, collapse = ",")
+  msg = paste("Number of samples found in GDB: ", msg0," ", length(df$chr))	
+  print(msg)
+  
+  if ( length(df$chr) < sample_nr ){
+     msg = paste0("Too few samples found in GDB")
+     print(msg)
+     stop("abort")
+  }
+  
   s = sample(seq(1,length(df$chr)), size=sample_nr)
   s = sort(s)
   return(df[s,])
@@ -75,9 +86,10 @@ genome = readDNAStringSet(fasta)
 DGV = opt$DGV
 target_chrs = opt$target_chrs
 target_bed = opt$target_bed
+nrDeletions = opt$nrDeletions
+nrDuplications = opt$nrDuplications
 
-
-minEventLength = 3000
+minEventLength = 100
 maxEventLength = 100000
 
 
@@ -91,11 +103,6 @@ if (! length(target_chrs) == 1){
   stop("Invalid target chromosome selection")
 }
 
-target_chrs_stripped = gsub("chr", "", target_chrs)
-if (! target_chrs_stripped %in% as.character(seq(1,22))){
-  stop("Invalid target chromosome selection")
-}
-
 
 ##################################################
 # parse the csv file
@@ -104,40 +111,64 @@ cc = rep("NULL", 20)
 cc[c(1,2,3,4,5,6)] = NA
 df = read.csv(file = DGV, sep = "", colClasses=cc, stringsAsFactors = FALSE) 
 
-print("get chromosme variants")
+print("get varians in target chromosome")
+target_chrs_stripped = gsub("chr", "", target_chrs)
+if (! target_chrs_stripped %in% as.character(seq(1,22))){
+  stop("Invalid target chromosome selection")
+}
 df = df[df["chr"] == target_chrs_stripped,] 
+head(df)
 
-df$start = as.numeric(df$start)
-df$end = as.numeric(df$end)
+print("convert ranges to numbers")
+df$start = as.numeric(as.character(df$start))
+df$end = as.numeric(as.character(df$end))
 df$width = df$end - df$start
+
+print("filter on min and max event lengths")
 df = df[df$width < maxEventLength,]
 df = df[df$width > minEventLength,]
+head(df)
+
+print("get exome target bed")
+exome_bed_df = read.table(target_bed)
+
+# be consistent between target bed and DGV
+chr_is_in_string = grepl("chr", exome_bed_df[1,1], fixed=TRUE)
+if (chr_is_in_string){
+ df$chr <- paste("chr", df$chr, sep="")
+}
 
 print("convert DGV to bed like format")
 df_ranges = df[, c('chr', 'start', 'end')]
 df_ranges = with(df_ranges, GRanges(chr, IRanges(start+1, end)))
 
-print("get exome target bed")
-exome_bed_df = read.table(target_bed)
+print("parse target bed as GRanges object")
 colnames(exome_bed_df) = c('chr', 'start', 'end')
 exons = with(exome_bed_df, GRanges(chr, IRanges(start+1, end)))
+head(exons)
 
-# get cnvs that overlap at least one target region
-df = df[countOverlaps(df_ranges, exons) > 1,]
+print("get cnvs that overlap at least one target region")
+df = df[countOverlaps(df_ranges, exons) >= 1,]
+head(df)
 
-# now remove any cnv's that overlap each other
+print("now remove any cnv's that overlap each other")
 df = deleteOverlaping(df)
+head(df)
 
-dels = get_sub_dataframe(df = df, names = c("deletion", "loss"), sample_nr = 10) 
-ins = get_sub_dataframe(df = df, names = c("insertion", "gain", "tandem"), sample_nr = 10)
+
+dels = get_sub_dataframe(
+     df = df, names = c("deletion", "loss"), sample_nr = nrDeletions) 
+ins = get_sub_dataframe(
+    df = df, names = c("insertion", "gain", "tandem"), sample_nr = nrDuplications)
 
 dels_gr = getGRanges(df=dels, target_chrs=target_chrs)
 tandems_gr = getGRanges(ins, target_chrs=target_chrs)
 # ins_gr = getGRanges(df=ins, target_chrs=target_chrs)
 
-# name the variables
 names(dels_gr) <- paste('deletion', 1:length(dels_gr), sep='')
 names(tandems_gr) <- paste('tandemDuplication', 1:length(tandems_gr), sep='')
+
+
 
 ##################################################
 # run simulation

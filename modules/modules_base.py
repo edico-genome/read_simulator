@@ -100,7 +100,7 @@ class ModuleBase(object):
 
             # start with clean dir
             if os.path.isdir(_dir):
-                shutil.rmtree(_dir)
+                shutil.rmtree(_dir, ignore_errors=True)
 
             try:
                 self.logger.info("Create {}: {}".format(_d, _dir))
