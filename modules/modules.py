@@ -329,7 +329,7 @@ class VCF2Fastas(ModuleBase):
     default_settings = {}
     expected_settings = ["outdir", "workdir", "truth_set_vcf",
                          "fasta_file"]
-    promised_outputs = ["mod_fasta_1", "mod_fasta_2"]
+    promised_outputs = ["mod_fasta_1", "mod_fasta_2", "liftoverBasename"]
     
     def create_fastas(self):
         """
@@ -358,11 +358,15 @@ class VCF2Fastas(ModuleBase):
             cmd_template = "bcftools consensus -c {liftover} -H {haplotype} " + \
                 "-f {fasta_file} {truth_set_vcf}"
 
+            liftoverBasename = os.path.join(
+                self.module_settings["outdir"], "dsim")
+            self.module_settings["liftoverBasename"] = liftoverBasename
+
             for hap in [1, 2]:
                 mod_fasta = os.path.join(
                     self.module_settings["outdir"], "mod_fasta_{}.fa".format(hap))
-                liftover = os.path.join(
-                    self.module_settings["outdir"], "liftover_{}.txt".format(hap))
+                liftover = "{}_{}{}".format(
+                    liftoverBasename, hap, ".liftover.txt")
                 options = {
                     "liftover": liftover, 
                     "haplotype": hap, 
@@ -745,8 +749,8 @@ class Pirs(ModuleBase):
     }
     expected_settings = ["PE100", "indels", "gcdep", "mod_fasta_1",
                          "mod_fasta_2", "fasta_file", "coverage"]
-    promised_outputs = ["fastq_location_1", "fastq_location_2", "read_info"]
-    update_db_keys = ["fastq_location_1", "fastq_location_2"]
+    promised_outputs = ["fastq_location_1", "fastq_location_2", "sam_gold"]
+    update_db_keys = ["fastq_location_1", "fastq_location_2", "sam_gold"]
 
     def copy_workdir_to_outdir(self, key):
         from_path = self.module_settings[key]
@@ -807,6 +811,23 @@ class Pirs(ModuleBase):
             self.module_settings['read_info'] = l[0]
         else:
             raise PipelineExc("Failed to find read_info: {}".format(p))
+
+
+        # xform read info
+        _xform_script = os.path.join(
+            this_dir_path, "..", "bin", "pirs_xform_read_info.pl")
+        cmd = "{} {} <(zcat {})".format(
+            _xform_script,
+            self.module_settings['liftoverBasename'],
+            self.module_settings['read_info'])
+
+        read_info_sam = self.module_settings[
+            'read_info'].replace("info.gz", "info.cleaned.sam")
+
+        run_process(cmd, self.logger, outfile=read_info_sam)
+
+        self.module_settings["sam_gold"] = read_info_sam
+        # make truth bam -> see bin pirs_make_truth_bam
 
         # cp to NAS 
         self.copy_workdir_to_outdir("fastq_location_1")
