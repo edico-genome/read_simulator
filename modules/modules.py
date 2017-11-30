@@ -13,6 +13,7 @@ from lib.common import PipelineExc, run_process
 from lib.common import trim_fasta, trim_vcf, trim_bam
 from lib.common import remove_contig_name_descriptions
 from lib.common import sort_target_region_bed
+from lib.common import create_gold_bam_for_pirs
 from lib import bamsurgeon_functions
 from lib import bcftools_functions
 from lib import vlrd_create_vcf
@@ -261,7 +262,7 @@ class BedTrimmer(ModuleBase):
     default_settings = {}
     expected_settings = ["target_chrs", "target_region_bed"]
     promised_outputs = ["target_region_bed"]
-    update_db_keys = ["target_region_bed"]
+    update_db_keys = ["target_region_bed", "cnv_target_bed"]
 
     def run(self):
         # should we only use a subset (e.g. chr20)?
@@ -322,6 +323,7 @@ class BedTrimmer(ModuleBase):
                               
         # update results
         self.module_settings["target_region_bed"] = new_target_bed
+        self.module_settings["cnv_target_bed"] = new_target_bed
 
 
 ###########################################################
@@ -353,6 +355,7 @@ class VCF2Fastas(ModuleBase):
             self.logger.info("No variants added to Fastas")
             self.module_settings["mod_fasta_1"] = self.module_settings["fasta_file"]
             self.module_settings["mod_fasta_2"] = self.module_settings["fasta_file"]
+            self.module_settings["liftoverBasename"] = "NONE"
         else:
             # else create two modified fastas
             cmd_template = "bcftools consensus -c {liftover} -H {haplotype} " + \
@@ -749,25 +752,12 @@ class Pirs(ModuleBase):
     }
     expected_settings = ["PE100", "indels", "gcdep", "mod_fasta_1",
                          "mod_fasta_2", "fasta_file", "coverage"]
-    promised_outputs = ["fastq_location_1", "fastq_location_2", "sam_gold"]
-    update_db_keys = ["fastq_location_1", "fastq_location_2", "sam_gold"]
+    promised_outputs = ["fastq_location_1", "fastq_location_2", "read_info"]
+    update_db_keys = ["fastq_location_1", "fastq_location_2"]
 
-    def copy_workdir_to_outdir(self, key):
-        from_path = self.module_settings[key]
-        from_name = os.path.basename(from_path)
-        to_path = os.path.join(self.module_settings['outdir'], from_name)
-        shutil.copy(from_path, to_path)
-        self.module_settings[key] = to_path
-        
 
-    def run(self):
-        try:
-            for i in ["mod_fasta_1", "mod_fasta_2"]:
-                assert os.path.isfile(self.module_settings[i])
-        except Exception as e:
-            raise PipelineExc('Pirs is missing a required modified Fasta')
-
-        # run
+    def create_reads(self):
+        # run pirs and create fqs
         self.logger.info('Pirs: simulating reads ...')
         pirs_log = os.path.join(self.module_settings['outdir'], "pirs.log")
 
@@ -800,39 +790,45 @@ class Pirs(ModuleBase):
                                   "Pirs output folder: {}".format(p_res))
             fq_list.append(p_res[0])
 
-
+        # find on staging
         self.module_settings["fastq_location_1"] = fq_list[0]
         self.module_settings["fastq_location_2"] = fq_list[1]
+        # copy to NAS
+        self.copy_workdir_to_outdir("fastq_location_1")
+        self.copy_workdir_to_outdir("fastq_location_2")
 
-        # read info for lift over and truth sam files
+    def validate_fastas(self):
+        try:
+            for i in ["mod_fasta_1", "mod_fasta_2"]:
+                assert os.path.isfile(self.module_settings[i])
+        except Exception as e:
+            raise PipelineExc('Pirs is missing a required modified Fasta')
+
+    def upload_read_info(self):
         p = os.path.join(self.module_settings["workdir"], 'pirs*read.info.gz')
         l = glob.glob(p)
         if os.path.isfile(l[0]):
             self.module_settings['read_info'] = l[0]
         else:
             raise PipelineExc("Failed to find read_info: {}".format(p))
-
-
-        # xform read info
-        _xform_script = os.path.join(
-            this_dir_path, "..", "bin", "pirs_xform_read_info.pl")
-        cmd = "{} {} <(zcat {})".format(
-            _xform_script,
-            self.module_settings['liftoverBasename'],
-            self.module_settings['read_info'])
-
-        read_info_sam = self.module_settings[
-            'read_info'].replace("info.gz", "info.cleaned.sam")
-
-        run_process(cmd, self.logger, outfile=read_info_sam)
-
-        self.module_settings["sam_gold"] = read_info_sam
-        # make truth bam -> see bin pirs_make_truth_bam
-
-        # cp to NAS 
-        self.copy_workdir_to_outdir("fastq_location_1")
-        self.copy_workdir_to_outdir("fastq_location_2")
         self.copy_workdir_to_outdir("read_info")
+
+    def run(self):
+        self.validate_fastas()
+        self.create_reads()
+        self.upload_read_info()
+
+
+###########################################################
+class PirsGoldBam(ModuleBase):
+    default_settings = {}
+    expected_settings = ["outdir", "liftoverBasename", "read_info"]
+    promised_outputs = ["sam_gold"]
+    update_db_keys = ["sam_gold"]
+
+    def run(self):
+        create_gold_bam_for_pirs(self)
+        self.copy_workdir_to_outdir("sam_gold")
 
 
 ###########################################################
@@ -989,68 +985,6 @@ class Pirs_Tumor(ModuleBase):
             line = tmp.format(2, 2, non_tumor_fqs[0], non_tumor_fqs[1])
             stream_out.write(line)
         self.db_api.upload_to_db('csv_list', fq_list)
-
-
-###########################################################
-class PirsTruthSam(ModuleBase):
-    default_settings = {}
-    expected_settings = []
-    promised_outputs = []
-
-    def run(self):
-        # truth sam
-        self.module_settings["truth_sam"] = \
-            os.path.join(self.module_settings["outdir"], "truth.sam")
-
-        # xform path
-        xform_script_path = os.path.join(this_dir_path, "alt_contig", "xform_pirs_read_info.pl")
-
-        # get settings from previous runs
-        for key in ["contig", "contig-1", "contig-2", "alt-sam", "read_info",
-                    "contigs_combo_type", "contig-1-from", "contig-1-to", "contig-2-from",
-                    "contig-2-to"]:
-            if key in self.module_settings:
-                self.module_settings[key] = self.module_settings[key]
-
-        bcf_modified_name = {}
-        for i in ["1", "2"]:
-            _contig = "contig-{}".format(i)
-            _contig_name = self.module_settings["contig-{}".format(i)]
-            _from = self.module_settings["contig-{}-from".format(i)]
-            _to = self.module_settings["contig-{}-to".format(i)]
-            bcf_modified_name[_contig] = "{}:{}-{}".format(_contig_name, _from, _to)
-
-        options = {
-            "xform": xform_script_path,
-            "read_info": self.module_settings["read_info"],
-            "alt-sam": self.module_settings["alt-sam"],
-            "bcf-contig-1": bcf_modified_name["contig-1"],
-            "bcf-contig-2": bcf_modified_name["contig-2"],
-            "orig-contig-1": self.module_settings["contig-1"],
-            "orig-contig-2": self.module_settings["contig-2"],
-            "contig-1-from": self.module_settings["contig-1-from"],
-            "contig-2-from": self.module_settings["contig-2-from"],
-            "truth_sam": self.module_settings["truth_sam"]
-        }
-
-        cmd = "{xform} --read-info <(zcat {read_info}) --alt-sam {alt-sam}"
-        cmd += " --contig1 {bcf-contig-1} --contig1-rename {orig-contig-1}"
-        cmd += " --contig1-offset {contig-1-from}"
-        cmd += " --contig2 {bcf-contig-2} --contig2-rename {orig-contig-2}"
-        cmd += " --contig2-offset {contig-2-from}"
-        cmd += " > {truth_sam}"
-
-        cmd = cmd.format(**options)
-
-        try:
-            self.logger.info("Truth SAM cmd: {}".format(cmd))
-            # for redirected streams subprocess requires the actual bash executable
-            res = subprocess.check_output(cmd, shell=True, executable='/bin/bash')
-            self.logger.info("Response: {}".format(res))
-            self.logger.info("Truth sam created: {}".format(self.module_settings["truth_sam"]))
-            self.db_api.upload_to_db('sam_gold', self.module_settings["truth_sam"])
-        except Exception as e:
-            raise PipelineExc('Failed to create gold Sam. Error message: %s' % e)
 
 
 ###########################################################

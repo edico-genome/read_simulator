@@ -15,8 +15,9 @@ class PipelinesBase(object):
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self, settings, pipeline_idx):
+    def __init__(self, settings, pipeline_idx, simulator_settings):
         self._class_name = self.__class__.__name__
+        self.simulator_settings = simulator_settings
         self.pipeline_idx = pipeline_idx
         self.validate_pipeline_settings(settings)
         self.update_settings_for_multiple_runs()
@@ -89,7 +90,8 @@ class PipelinesBase(object):
     def instantiate_modules(self):
         """ validate settings prior to run """
         for C in self.modules:
-            inst = C(self.pipeline_settings, self.db_api, self.logger)
+            inst = C(self.pipeline_settings, self.db_api, self.logger, 
+                     self.simulator_settings)
             self.module_instances.append(inst)
 
     def run(self):

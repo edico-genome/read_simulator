@@ -1,1 +1,3 @@
-{}
+{
+  "tests/test_functional.py::test_basic_end2end": true
+}

@@ -19,7 +19,8 @@ class ModuleBase(object):
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self, pipeline_settings, db_api, local_logger):
+    def __init__(self, pipeline_settings, db_api, local_logger, 
+                 simulator_settings):
         self.name = self.__class__.__name__
         self.logger = local_logger
         self.logger.info("- validating module: {}".format(self.name))
@@ -28,6 +29,7 @@ class ModuleBase(object):
         self.check_and_update_input_settings()
         self.db_api = db_api
         self.lock = self.pipeline_settings["lock"]
+        self.simulator_settings = simulator_settings
 
 
     @abstractproperty
@@ -56,6 +58,15 @@ class ModuleBase(object):
         :rtype: list
         """
         pass
+
+    def copy_workdir_to_outdir(self, key):
+        from_path = self.module_settings[key]
+        from_name = os.path.basename(from_path)
+        to_path = os.path.join(self.module_settings['outdir'], 
+            from_name)
+        shutil.copy(from_path, to_path)
+        self.module_settings[key] = to_path
+
 
     def check_and_update_input_settings(self):
         """
@@ -98,16 +109,20 @@ class ModuleBase(object):
         for _d in ['workdir', 'outdir']:
             _dir = self.module_settings[_d]
 
-            # start with clean dir
-            if os.path.isdir(_dir):
-                shutil.rmtree(_dir, ignore_errors=True)
+            # start with clean dir 
+            # ( for debugging we can speed up reruns with existing data )
+            if not self.simulator_settings['debug_mode']:
+                if os.path.isdir(_dir):
+                    shutil.rmtree(_dir, ignore_errors=True)
 
-            try:
-                self.logger.info("Create {}: {}".format(_d, _dir))
-                os.makedirs(_dir)
-            except Exception as e:
-                msg = "Failed to create {}: {}, exception: {}".format(_d, _dir, e)
-                raise PipelineExc(msg)
+            if not os.path.isdir(_dir):
+                try:
+                    self.logger.info("Create {}: {}".format(_d, _dir))
+                    os.makedirs(_dir)
+                except Exception as e:
+                    msg = "Failed to create {}: {}, exception: {}".format(
+                        _d, _dir, e)
+                    raise PipelineExc(msg)
 
     def print_module_settings(self):
         self.logger.info(self.module_settings)
@@ -136,7 +151,6 @@ class ModuleBase(object):
                     self.db_api.upload_to_db(i, self.module_settings[i])
                 except:
                     raise PipelineExc("Invalid key to update db: {}".format(i))
-
 
     def check_and_update_promised_outputs(self):
         """

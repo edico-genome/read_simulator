@@ -211,9 +211,12 @@ def get_reference_allele_from_fasta(settings):
             alt = [None, None]
             ref = [None, None]
 
+            # import pdb; pdb.set_trace()
+
             this_fasta_line = settings['parsed_fasta'][_chr][fasta_line_index]
             try:
-                next_fasta_line = settings['parsed_fasta'][_chr][fasta_line_index+1]
+                next_fasta_line = settings['parsed_fasta'][_chr][
+                    fasta_line_index+1]
             except:
                 next_fasta_line = None
 

@@ -1,8 +1,11 @@
 import logging
-import pdb, sys, os
+import pdb, sys, os, glob
 import subprocess
+import gzip
 
 logger = logging.getLogger(__name__)
+
+this_dir_path = os.path.dirname(os.path.realpath(__file__))
 
 ###########################################################
 class MPdb(pdb.Pdb):
@@ -270,3 +273,61 @@ def sort_target_region_bed(_module):
         raise PipelineExc(e)
         
     _module.module_settings["sorted_bed"] = sorted_bed
+
+
+###########################################################
+def create_gold_bam_for_pirs(_module):
+
+    # xform read info using liftover files
+    if ".gz" in _module.module_settings['read_info']:
+        unzipped = _module.module_settings['read_info'][:-3]
+        with gzip.open( _module.module_settings['read_info'], 'r') as stream_in, \
+             open(unzipped, 'w') as stream_out:
+            for line in stream_in:
+                stream_out.write(line)
+        _module.module_settings['read_info'] = unzipped
+    
+    # headerless sam
+    _module.logger.info("create headerless sam")
+    _xform_script = os.path.join(
+        this_dir_path, "..", "bin", "pirs_xform_read_info.pl")
+    cmd = "{} {} {}".format(
+        _xform_script,
+        _module.module_settings['read_info'],
+        _module.module_settings['liftoverBasename'])
+
+    read_info_sam = os.path.join(_module.module_settings['outdir'], "gold.sam")
+    run_process(cmd, _module.logger, outfile=read_info_sam)
+    _module.logger.info("sam file: {}".format(read_info_sam))
+
+    # bam with header
+    _module.logger.info("create bam with header")
+    
+    bam_headers = {'hg19': 'hg19_bam_header.txt',
+                   'grch37': 'grch37_bam_header.txt',
+                   'hs37d5': 'hs37d5_bam_header.txt'}
+       
+    ref = _module.module_settings['reference'].lower()
+    assert ref in bam_headers, \
+        'please specify a valid reference: {}'.format(
+            ', '.join(bam_header.keys()))
+
+    bam_header_file = os.path.join(
+        this_dir_path, "..", "templates", bam_headers[ref])
+    _module.logger.info("bam header file: {}".format(bam_header_file))
+
+    bam = os.path.join(_module.module_settings['outdir'], "gold.bam")
+    cmd = "cat {} {} | sambamba view -S -f bam /dev/stdin > {}"
+    cmd = cmd.format(bam_header_file, read_info_sam, bam)
+
+    res = subprocess.check_output(
+        cmd, shell=True, executable='/bin/bash')
+
+    bam_sorted = "{}.sorted.bam".format(bam)
+    cmd = "sambamba sort -p -t 10 -o {} {}".format(bam_sorted, bam)
+    run_process(cmd, _module.logger)
+
+    cmd = "sambamba index -t 10 {}".format(bam_sorted)
+    run_process(cmd, _module.logger)
+
+    _module.module_settings["sam_gold"] = bam_sorted

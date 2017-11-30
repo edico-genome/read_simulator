@@ -28,7 +28,7 @@ def pipeline_factory(pipeline_name):
     return ThisPipelineClass
 
 
-def instantiate_pipelines(settings):
+def instantiate_pipelines(settings, simulator_settings):
     """
     instantiate pipelines and validate pipeline settings
     """
@@ -54,7 +54,7 @@ def instantiate_pipelines(settings):
             logger.info("Pipeline sub index: {}\n".format(idx))
             # class factory and instantiate pipeline object
             Pipeline = pipeline_factory(pipeline_settings["pipeline_name"])
-            p = Pipeline(pipeline_settings, idx)
+            p = Pipeline(pipeline_settings, idx, simulator_settings)
             
             # give each pipeline an idependent logger
             log_name = "dSim_{}".format(p.pipeline_settings["dataset_name"])
@@ -98,7 +98,7 @@ def run_this_pipeline(p, result_queue=None):
     if result_queue:
         result_queue.put((p.name, p.dataset_name, state))
 
-def run_pipelines(pipelines, run_serial):
+def run_pipelines(pipelines, simulator_settings):
     # run processes in parallel
     result_queue = Queue()
     MAX_PROCESSES = 5
@@ -106,7 +106,7 @@ def run_pipelines(pipelines, run_serial):
     processes = []
 
     # run serial
-    if run_serial:
+    if simulator_settings['run_serial']:
         logger.info("Running in serial")
         for pipeline in pipelines:
             run_this_pipeline(pipeline)
@@ -136,9 +136,9 @@ def run_pipelines(pipelines, run_serial):
 
 ############################################################
 # main
-def main(settings, run_serial):
-    pipelines_to_run = instantiate_pipelines(settings)
-    return run_pipelines(pipelines_to_run, run_serial)
+def main(settings, simulator_settings):
+    pipelines_to_run = instantiate_pipelines(settings, simulator_settings)
+    return run_pipelines(pipelines_to_run, simulator_settings)
     
 
 ############################################################
@@ -148,10 +148,18 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-r', '--run_settings', action='store', required=True)
     parser.add_argument('-s', '--run_serial', action='store_true', help='Default run parallel')
+    parser.add_argument('-d', '--debug_mode', action='store_true', help='Debug')
     args = parser.parse_args()
 
+    if args.debug_mode:
+        args.run_serial = True
+
+    
+    simulator_settings = {'debug_mode': args.debug_mode,
+                          'run_serial': args.run_serial}
+
     logger.info("\nINPUT SETTINGS\n")
-    settings = Settings(args.run_settings)
-    settings.print_settings()
-    main(settings, args.run_serial)
+    datasets_settings = Settings(args.run_settings)
+    datasets_settings.print_settings()
+    main(datasets_settings, simulator_settings)
 
