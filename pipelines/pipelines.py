@@ -27,6 +27,11 @@ class Normal(PipelinesBase):
     # modules = [CleanVCF, BedTrimmer, VCF2Fastas, Pirs]
     modules = [FastaTrimmer, BedTrimmer, CleanVCF, VCF2Fastas, Pirs]
 
+class Normal_Exome(PipelinesBase):
+    # modules = [CleanVCF, BedTrimmer, VCF2Fastas, Pirs]
+    modules = [PrepCNVprobes, FastaTrimmer, CleanVCF, VCF2Fastas, Capsim]
+
+
 class Tumor(PipelinesBase):
     modules = [ChrTrimmer, VCF2BamsurgeonBed, Bamsurgeon]
 
