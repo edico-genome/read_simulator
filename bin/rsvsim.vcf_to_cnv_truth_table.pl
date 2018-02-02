@@ -51,11 +51,19 @@ while(<$vcfFH>)
           my @fields = split /;/, $info;
           for my $fld (@fields) {
               my ($tag,$val) = split /=/, $fld;
-               $allele_count = 2+$val if ($tag eq "TDUP");
+               $allele_count = $val if ($tag eq "TDUP");
 
           }
-          $cnv_length /= ($allele_count-2);   # we want the length of the ref seq that was copied $val times
+          $cnv_length /= ($allele_count);   # we want the length of the ref seq that was copied $val times
           $pos -= $cnv_length;  # For a TANDUP vcf record, the POS was moved to end of first dup'ed segment.
+
+          if ($alt_count == 1) {
+             $allele_count += 2;  # heterozygous case
+          } elsif ($alt_count == 2) {
+             $allele_count = 2*(1 + $allele_count);  # homozygous case
+          } else {
+             $allele_count = -1;   # something went awry
+          }
       }
       if ($type eq "INS") {
           my @fields = split /;/, $info;

@@ -1,0 +1,16 @@
+[
+  {
+    "num_runs": 1,
+    "start_idx": 0,
+    "pipeline_name": "Normal",
+    "dataset_name": "dsim_clean_100bp_30x_whg",
+    "reference": "hg19",
+    "outdir": "/mnt/archive/sim_data/dSim",
+    "workdir": "/staging/tmp",
+    "shared_dir": "/staging/tmp",
+    "useIndelErrors": 0,
+    "target_chrs": "",
+    "coverage": "40",
+    "read_len": "100"
+  }
+]

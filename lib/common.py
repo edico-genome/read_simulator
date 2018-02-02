@@ -24,7 +24,9 @@ class MPdb(pdb.Pdb):
 
 ###########################################################
 def run_process(cmd, _logger, outfile=None, _cwd=None):
-    """ helper function to run cmd """
+    """ helper function to run cmd
+``  : _cwd, current woring directory
+    """
     output = None
 
     if not isinstance(cmd, list):
@@ -296,7 +298,7 @@ def create_gold_bam_for_pirs(_module):
         _module.module_settings['read_info'],
         _module.module_settings['liftoverBasename'])
 
-    read_info_sam = os.path.join(_module.module_settings['outdir'], "gold.sam")
+    read_info_sam = os.path.join(_module.module_settings['workdir'], "gold.sam")
     run_process(cmd, _module.logger, outfile=read_info_sam)
     _module.logger.info("sam file: {}".format(read_info_sam))
 
@@ -316,7 +318,7 @@ def create_gold_bam_for_pirs(_module):
         this_dir_path, "..", "templates", bam_headers[ref])
     _module.logger.info("bam header file: {}".format(bam_header_file))
 
-    bam = os.path.join(_module.module_settings['outdir'], "gold.bam")
+    bam = os.path.join(_module.module_settings['workdir'], "gold.bam")
     cmd = "cat {} {} | sambamba view -S -f bam /dev/stdin > {}"
     cmd = cmd.format(bam_header_file, read_info_sam, bam)
 
@@ -325,9 +327,13 @@ def create_gold_bam_for_pirs(_module):
 
     bam_sorted = "{}.sorted.bam".format(bam)
     cmd = "sambamba sort -p -t 10 -o {} {}".format(bam_sorted, bam)
-    run_process(cmd, _module.logger)
+    res = subprocess.check_output(
+        cmd, shell=True, executable='/bin/bash')
+    _module.logger.info(res)
 
     cmd = "sambamba index -t 10 {}".format(bam_sorted)
-    run_process(cmd, _module.logger)
+    res = subprocess.check_output(
+        cmd, shell=True, executable='/bin/bash')
+    _module.logger.info(res)
 
     _module.module_settings["sam_gold"] = bam_sorted

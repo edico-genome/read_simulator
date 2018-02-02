@@ -36,7 +36,7 @@ get_sub_dataframe = function(df, names, sample_nr){
   print(msg)
   
   if ( length(df$chr) < sample_nr ){
-     msg = paste0("Too few samples found in GDB")
+     msg = paste0("Samples found in GDB: ",length(df$chr)," is less than required: ",sample_nr)
      print(msg)
      stop("abort")
   }
@@ -86,8 +86,8 @@ genome = readDNAStringSet(fasta)
 DGV = opt$DGV
 target_chrs = opt$target_chrs
 target_bed = opt$target_bed
-nrDeletions = opt$nrDeletions
-nrDuplications = opt$nrDuplications
+nrDeletions = as.numeric(as.character(opt$nrDeletions))
+nrDuplications = as.numeric(as.character(opt$nrDuplications))
 
 minEventLength = 100
 maxEventLength = 100000

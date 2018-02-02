@@ -1,0 +1,511 @@
+
+INPUT SETTINGS
+
+RUN 1
+coverage: '30'
+dataset_name: vlrd_normalNoise_snp_indels_varRate0.005_250bp
+num_runs: 1
+outdir: /mnt/archive/sim_data/dSim
+pipeline_name: VLRD
+read_len: 250
+reference: hs37d5
+shared_dir: /staging/tmp
+target_chrs: '1'
+target_region_bed: /mnt/archive/varunj/MRJD_BedFiles/hs37d5_sorted.SegDupTable.txt
+useIndelErrors: 0
+varrate: 0.005
+workdir: /staging/dSim
+
+RUN 2
+coverage: '40'
+dataset_name: vlrd_normalNoise_snp_indels_varRate0.005_200bp
+num_runs: 1
+outdir: /mnt/archive/sim_data/dSim
+pipeline_name: VLRD
+read_len: 200
+reference: hs37d5
+shared_dir: /staging/tmp
+target_chrs: '1'
+target_region_bed: /mnt/archive/varunj/MRJD_BedFiles/hs37d5_sorted.SegDupTable.txt
+truth_set_vcf: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/VLRD_VCF/norm_merged_truth.vcf.gz
+useIndelErrors: 0
+varrate: 0.005
+workdir: /staging/dSim
+
+RUN 3
+coverage: '40'
+dataset_name: vlrd_normalNoise_snp_indels_varRate0.005_150bp
+num_runs: 1
+outdir: /mnt/archive/sim_data/dSim
+pipeline_name: VLRD
+read_len: 150
+reference: hs37d5
+shared_dir: /staging/tmp
+target_chrs: '1'
+target_region_bed: /mnt/archive/varunj/MRJD_BedFiles/hs37d5_sorted.SegDupTable.txt
+truth_set_vcf: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/VLRD_VCF/norm_merged_truth.vcf.gz
+useIndelErrors: 0
+varrate: 0.005
+workdir: /staging/dSim
+
+RUN 4
+coverage: '40'
+dataset_name: vlrd_normalNoise_snp_indels_varRate0.005_100bp
+num_runs: 1
+outdir: /mnt/archive/sim_data/dSim
+pipeline_name: VLRD
+read_len: 100
+reference: hs37d5
+shared_dir: /staging/tmp
+target_chrs: '1'
+target_region_bed: /mnt/archive/varunj/MRJD_BedFiles/hs37d5_sorted.SegDupTable.txt
+truth_set_vcf: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/VLRD_VCF/norm_merged_truth.vcf.gz
+useIndelErrors: 0
+varrate: 0.005
+workdir: /staging/dSim
+
+RUN 5
+coverage: '40'
+dataset_name: vlrd_normalNoise_snp_indels_varRate0.005_50bp
+num_runs: 1
+outdir: /mnt/archive/sim_data/dSim
+pipeline_name: VLRD
+read_len: 50
+reference: hs37d5
+shared_dir: /staging/tmp
+target_chrs: '1'
+target_region_bed: /mnt/archive/varunj/MRJD_BedFiles/hs37d5_sorted.SegDupTable.txt
+truth_set_vcf: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/VLRD_VCF/norm_merged_truth.vcf.gz
+useIndelErrors: 0
+varrate: 0.005
+workdir: /staging/dSim
+
+RUN 6
+coverage: '30'
+dataset_name: vlrd_normalNoise_snp_indels_varRate0.005_250bp_whg
+num_runs: 0
+outdir: /mnt/archive/sim_data/dSim
+pipeline_name: VLRD
+read_len: 250
+reference: hs37d5
+shared_dir: /staging/tmp
+target_chrs: ''
+target_region_bed: /mnt/archive/varunj/MRJD_BedFiles/hs37d5_sorted.SegDupTable.txt
+truth_set_vcf: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/VLRD_VCF/norm_merged_truth.vcf.gz
+useIndelErrors: 0
+varrate: 0.005
+workdir: /staging/dSim
+
+RUN 7
+coverage: '40'
+dataset_name: vlrd_normalNoise_snp_indels_varRate0.005_200bp_whg
+num_runs: 0
+outdir: /mnt/archive/sim_data/dSim
+pipeline_name: VLRD
+read_len: 200
+reference: hs37d5
+shared_dir: /staging/tmp
+target_chrs: ''
+target_region_bed: /mnt/archive/varunj/MRJD_BedFiles/hs37d5_sorted.SegDupTable.txt
+truth_set_vcf: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/VLRD_VCF/norm_merged_truth.vcf.gz
+useIndelErrors: 0
+varrate: 0.005
+workdir: /staging/dSim
+
+RUN 8
+coverage: '40'
+dataset_name: vlrd_normalNoise_snp_indels_varRate0.005_150bp_whg
+num_runs: 0
+outdir: /mnt/archive/sim_data/dSim
+pipeline_name: VLRD
+read_len: 150
+reference: hs37d5
+shared_dir: /staging/tmp
+target_chrs: '0'
+target_region_bed: /mnt/archive/varunj/MRJD_BedFiles/hs37d5_sorted.SegDupTable.txt
+truth_set_vcf: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/VLRD_VCF/norm_merged_truth.vcf.gz
+useIndelErrors: 0
+varrate: 0.005
+workdir: /staging/dSim
+
+RUN 9
+coverage: '40'
+dataset_name: vlrd_normalNoise_snp_indels_varRate0.005_100bp_whg
+num_runs: 0
+outdir: /mnt/archive/sim_data/dSim
+pipeline_name: VLRD
+read_len: 100
+reference: hs37d5
+shared_dir: /staging/tmp
+target_chrs: ''
+target_region_bed: /mnt/archive/varunj/MRJD_BedFiles/hs37d5_sorted.SegDupTable.txt
+truth_set_vcf: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/VLRD_VCF/norm_merged_truth.vcf.gz
+useIndelErrors: 0
+varrate: 0.005
+workdir: /staging/dSim
+
+RUN 10
+coverage: '40'
+dataset_name: vlrd_normalNoise_snp_indels_varRate0.005_50bp_whg
+num_runs: 0
+outdir: /mnt/archive/sim_data/dSim
+pipeline_name: VLRD
+read_len: 50
+reference: hs37d5
+shared_dir: /staging/tmp
+target_chrs: ''
+target_region_bed: /mnt/archive/varunj/MRJD_BedFiles/hs37d5_sorted.SegDupTable.txt
+truth_set_vcf: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/VLRD_VCF/norm_merged_truth.vcf.gz
+useIndelErrors: 0
+varrate: 0.005
+workdir: /staging/dSim
+
+RUN 11
+coverage: '30'
+dataset_name: vlrd_varrate_005_snps
+num_runs: 0
+outdir: /mnt/archive/sim_data/dSim
+pipeline_name: VLRD
+reference: hg19
+shared_dir: /staging/tmp
+target_chrs: ALL
+target_region_bed: /mnt/archive/sim_data/vlrd/hg19.SegDupTable_sorted_contigFiltered.txt
+truth_set_vcf: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/VLRD_VCF/norm_merged_truth.vcf.gz
+useIndelErrors: 1
+varrate: 0.005
+workdir: /staging/dSim
+
+RUN 12
+coverage: '30'
+dataset_name: vlrd_baylor_varRate_0.02
+num_runs: 0
+outdir: /mnt/archive/sim_data/dSim
+pipeline_name: VLRD
+reference: hs37d5
+target_region_bed: /mnt/archive/sim_data/dSim/vlrd/baylor_files/wes_pseudogene_v2.bed
+useIndelErrors: 0
+varrate: 0.005
+workdir: /staging/tmp
+
+
+VALIDATING PIPELINES
+
+Validating run: 0
+
+Pipeline sub index: 0
+
+Validating pipeline settings: VLRD
+Check if dataset exists
+Dataset exists: update existing
+Init local logging: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/vlrd_normalNoise_snp_indels_varRate0.005_250bp.log
+- validating module: FastaTrimmer
+- validating module: BedTrimmer
+- validating module: VLRD_VCF
+- validating module: VCF2Fastas
+- validating module: Pirs
+Validating run: 1
+
+Pipeline sub index: 0
+
+Validating pipeline settings: VLRD
+Check if dataset exists
+Dataset exists: update existing
+Init local logging: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_200bp/vlrd_normalNoise_snp_indels_varRate0.005_200bp.log
+- validating module: FastaTrimmer
+- validating module: BedTrimmer
+- validating module: VLRD_VCF
+- validating module: VCF2Fastas
+- validating module: Pirs
+Validating run: 2
+
+Pipeline sub index: 0
+
+Validating pipeline settings: VLRD
+Check if dataset exists
+Dataset exists: update existing
+Init local logging: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_150bp/vlrd_normalNoise_snp_indels_varRate0.005_150bp.log
+- validating module: FastaTrimmer
+- validating module: BedTrimmer
+- validating module: VLRD_VCF
+- validating module: VCF2Fastas
+- validating module: Pirs
+Validating run: 3
+
+Pipeline sub index: 0
+
+Validating pipeline settings: VLRD
+Check if dataset exists
+Dataset exists: update existing
+Init local logging: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_100bp/vlrd_normalNoise_snp_indels_varRate0.005_100bp.log
+- validating module: FastaTrimmer
+- validating module: BedTrimmer
+- validating module: VLRD_VCF
+- validating module: VCF2Fastas
+- validating module: Pirs
+Validating run: 4
+
+Pipeline sub index: 0
+
+Validating pipeline settings: VLRD
+Check if dataset exists
+Dataset exists: update existing
+Init local logging: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_50bp/vlrd_normalNoise_snp_indels_varRate0.005_50bp.log
+- validating module: FastaTrimmer
+- validating module: BedTrimmer
+- validating module: VLRD_VCF
+- validating module: VCF2Fastas
+- validating module: Pirs
+Skipping run: 5
+
+Skipping run: 6
+
+Skipping run: 7
+
+Skipping run: 8
+
+Skipping run: 9
+
+Skipping run: 10
+
+Skipping run: 11
+
+
+RUNNING PIPELINES
+
+Running in serial
+
+PIPELINE: VLRD
+Create workdir: /staging/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/FastaTrimmer
+Create outdir: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/FastaTrimmer
+
+- module: FastaTrimmer
+Fasta file first line: >1 dna:chromosome chromosome:GRCh37:1:1:249250621:1
+Fasta file not in expected format
+Fasta previously preprocessed and available for use by RSVSim
+Trim FASTA
+Trim Fasta for chromosome(s): 1
+Run cmd: samtools faidx /staging/tmp/hs37d5.fa_mod 1
+wrote output to: /staging/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/FastaTrimmer/chr_1.fa
+Cmd output: None
+cmd exit code: 0
+Run cmd: samtools faidx /staging/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/FastaTrimmer/chr_1.fa
+Cmd output: 
+cmd exit code: 0
+- done: FastaTrimmer
+Updating pipeline setting: fasta_file
+Create workdir: /staging/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/BedTrimmer
+Create outdir: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/BedTrimmer
+
+- module: BedTrimmer
+Trim BED to small chromosome
+- done: BedTrimmer
+Updating pipeline setting: target_region_bed
+Create workdir: /staging/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/VLRD_VCF
+Create outdir: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/VLRD_VCF
+
+- module: VLRD_VCF
+sort -V -k1,1 -k2,2g /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/BedTrimmer/trimmed_target_bed.txt | grep -v GL > /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/VLRD_VCF/target_sorted.bed
+Truth VCF provided
+- done: VLRD_VCF
+Handled Exception: VLRD
+Continue with next pipeline ...
+Traceback (most recent call last):
+  File "./dSim.py", line 85, in run_this_pipeline
+    p.run()
+  File "/home/theoh/git/read_simulator/pipelines/pipelines_base.py", line 110, in run
+    inst.after_run()
+  File "/home/theoh/git/read_simulator/modules/modules_base.py", line 140, in after_run
+    self.check_and_update_promised_outputs()
+  File "/home/theoh/git/read_simulator/modules/modules_base.py", line 163, in check_and_update_promised_outputs
+    raise PipelineExc(" - missing promised result: {}".format(output))
+PipelineExc:  - missing promised result: truth_set_vcf
+
+PIPELINE: VLRD
+Create workdir: /staging/dSim/vlrd_normalNoise_snp_indels_varRate0.005_200bp/FastaTrimmer
+Create outdir: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_200bp/FastaTrimmer
+
+- module: FastaTrimmer
+Fasta file first line: >1 dna:chromosome chromosome:GRCh37:1:1:249250621:1
+Fasta file not in expected format
+Fasta previously preprocessed and available for use by RSVSim
+Trim FASTA
+Trim Fasta for chromosome(s): 1
+Run cmd: samtools faidx /staging/tmp/hs37d5.fa_mod 1
+wrote output to: /staging/dSim/vlrd_normalNoise_snp_indels_varRate0.005_200bp/FastaTrimmer/chr_1.fa
+Cmd output: None
+cmd exit code: 0
+Run cmd: samtools faidx /staging/dSim/vlrd_normalNoise_snp_indels_varRate0.005_200bp/FastaTrimmer/chr_1.fa
+Cmd output: 
+cmd exit code: 0
+- done: FastaTrimmer
+Updating pipeline setting: fasta_file
+Create workdir: /staging/dSim/vlrd_normalNoise_snp_indels_varRate0.005_200bp/BedTrimmer
+Create outdir: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_200bp/BedTrimmer
+
+- module: BedTrimmer
+Trim BED to small chromosome
+- done: BedTrimmer
+Updating pipeline setting: target_region_bed
+Create workdir: /staging/dSim/vlrd_normalNoise_snp_indels_varRate0.005_200bp/VLRD_VCF
+Create outdir: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_200bp/VLRD_VCF
+
+- module: VLRD_VCF
+sort -V -k1,1 -k2,2g /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_200bp/BedTrimmer/trimmed_target_bed.txt | grep -v GL > /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_200bp/VLRD_VCF/target_sorted.bed
+Truth VCF provided
+- done: VLRD_VCF
+Updating pipeline setting: truth_set_vcf
+Create workdir: /staging/dSim/vlrd_normalNoise_snp_indels_varRate0.005_200bp/VCF2Fastas
+Create outdir: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_200bp/VCF2Fastas
+
+- module: VCF2Fastas
+Unexpected Exception: VLRD
+Continue with next pipeline ...
+Traceback (most recent call last):
+  File "./dSim.py", line 85, in run_this_pipeline
+    p.run()
+  File "/home/theoh/git/read_simulator/pipelines/pipelines_base.py", line 109, in run
+    inst.run()
+  File "/home/theoh/git/read_simulator/modules/modules.py", line 392, in run
+    self.create_fastas()
+  File "/home/theoh/git/read_simulator/modules/modules.py", line 348, in create_fastas
+    with open_safe(self.module_settings["truth_set_vcf"]) as stream_in:
+  File "/opt/python-2.7/lib/python2.7/gzip.py", line 34, in open
+    return GzipFile(filename, mode, compresslevel)
+  File "/opt/python-2.7/lib/python2.7/gzip.py", line 94, in __init__
+    fileobj = self.myfileobj = __builtin__.open(filename, mode or 'rb')
+IOError: [Errno 2] No such file or directory: u'/mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/VLRD_VCF/norm_merged_truth.vcf.gz'
+
+PIPELINE: VLRD
+Create workdir: /staging/dSim/vlrd_normalNoise_snp_indels_varRate0.005_150bp/FastaTrimmer
+Create outdir: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_150bp/FastaTrimmer
+
+- module: FastaTrimmer
+Fasta file first line: >1 dna:chromosome chromosome:GRCh37:1:1:249250621:1
+Fasta file not in expected format
+Fasta previously preprocessed and available for use by RSVSim
+Trim FASTA
+Trim Fasta for chromosome(s): 1
+Run cmd: samtools faidx /staging/tmp/hs37d5.fa_mod 1
+wrote output to: /staging/dSim/vlrd_normalNoise_snp_indels_varRate0.005_150bp/FastaTrimmer/chr_1.fa
+Cmd output: None
+cmd exit code: 0
+Run cmd: samtools faidx /staging/dSim/vlrd_normalNoise_snp_indels_varRate0.005_150bp/FastaTrimmer/chr_1.fa
+Cmd output: 
+cmd exit code: 0
+- done: FastaTrimmer
+Updating pipeline setting: fasta_file
+Create workdir: /staging/dSim/vlrd_normalNoise_snp_indels_varRate0.005_150bp/BedTrimmer
+Create outdir: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_150bp/BedTrimmer
+
+- module: BedTrimmer
+Trim BED to small chromosome
+- done: BedTrimmer
+Updating pipeline setting: target_region_bed
+Create workdir: /staging/dSim/vlrd_normalNoise_snp_indels_varRate0.005_150bp/VLRD_VCF
+Create outdir: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_150bp/VLRD_VCF
+
+- module: VLRD_VCF
+sort -V -k1,1 -k2,2g /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_150bp/BedTrimmer/trimmed_target_bed.txt | grep -v GL > /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_150bp/VLRD_VCF/target_sorted.bed
+Truth VCF provided
+- done: VLRD_VCF
+Updating pipeline setting: truth_set_vcf
+Create workdir: /staging/dSim/vlrd_normalNoise_snp_indels_varRate0.005_150bp/VCF2Fastas
+Create outdir: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_150bp/VCF2Fastas
+
+- module: VCF2Fastas
+Unexpected Exception: VLRD
+Continue with next pipeline ...
+Traceback (most recent call last):
+  File "./dSim.py", line 85, in run_this_pipeline
+    p.run()
+  File "/home/theoh/git/read_simulator/pipelines/pipelines_base.py", line 109, in run
+    inst.run()
+  File "/home/theoh/git/read_simulator/modules/modules.py", line 392, in run
+    self.create_fastas()
+  File "/home/theoh/git/read_simulator/modules/modules.py", line 348, in create_fastas
+    with open_safe(self.module_settings["truth_set_vcf"]) as stream_in:
+  File "/opt/python-2.7/lib/python2.7/gzip.py", line 34, in open
+    return GzipFile(filename, mode, compresslevel)
+  File "/opt/python-2.7/lib/python2.7/gzip.py", line 94, in __init__
+    fileobj = self.myfileobj = __builtin__.open(filename, mode or 'rb')
+IOError: [Errno 2] No such file or directory: u'/mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/VLRD_VCF/norm_merged_truth.vcf.gz'
+
+PIPELINE: VLRD
+Create workdir: /staging/dSim/vlrd_normalNoise_snp_indels_varRate0.005_100bp/FastaTrimmer
+Create outdir: /mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_100bp/FastaTrimmer
+
+- module: FastaTrimmer
+Fasta file first line: >1 dna:chromosome chromosome:GRCh37:1:1:249250621:1
+Fasta file not in expected format
+Fasta previously preprocessed and available for use by RSVSim
+Trim FASTA
+Trim Fasta for chromosome(s): 1
+Run cmd: samtools faidx /staging/tmp/hs37d5.fa_mod 1
+logging to /home/theoh/git/read_simulator/lib/../logs/simulator_2017_12_13__03_07_01.log
+{'name': u'vlrd_normalNoise_snp_indels_varRate0.005_250bp',
+ 'set_x': 'ref_type',
+ 'value': u'hs37d5'}
+{'name': u'vlrd_normalNoise_snp_indels_varRate0.005_200bp',
+ 'set_x': 'ref_type',
+ 'value': u'hs37d5'}
+{'name': u'vlrd_normalNoise_snp_indels_varRate0.005_150bp',
+ 'set_x': 'ref_type',
+ 'value': u'hs37d5'}
+{'name': u'vlrd_normalNoise_snp_indels_varRate0.005_100bp',
+ 'set_x': 'ref_type',
+ 'value': u'hs37d5'}
+{'name': u'vlrd_normalNoise_snp_indels_varRate0.005_50bp',
+ 'set_x': 'ref_type',
+ 'value': u'hs37d5'}
+{'name': u'vlrd_normalNoise_snp_indels_varRate0.005_250bp',
+ 'set_x': 'cnv_target_bed',
+ 'value': u'/mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/BedTrimmer/trimmed_target_bed.txt'}
+{'name': u'vlrd_normalNoise_snp_indels_varRate0.005_250bp',
+ 'set_x': 'target_region_bed',
+ 'value': u'/mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/BedTrimmer/trimmed_target_bed.txt'}
+{'name': u'vlrd_normalNoise_snp_indels_varRate0.005_200bp',
+ 'set_x': 'cnv_target_bed',
+ 'value': u'/mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_200bp/BedTrimmer/trimmed_target_bed.txt'}
+{'name': u'vlrd_normalNoise_snp_indels_varRate0.005_200bp',
+ 'set_x': 'target_region_bed',
+ 'value': u'/mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_200bp/BedTrimmer/trimmed_target_bed.txt'}
+{'name': u'vlrd_normalNoise_snp_indels_varRate0.005_200bp',
+ 'set_x': 'target_region_bed',
+ 'value': u'/mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_200bp/BedTrimmer/trimmed_target_bed.txt'}
+{'name': u'vlrd_normalNoise_snp_indels_varRate0.005_200bp',
+ 'set_x': 'truth_set_vcf',
+ 'value': u'/mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/VLRD_VCF/norm_merged_truth.vcf.gz'}
+{'name': u'vlrd_normalNoise_snp_indels_varRate0.005_150bp',
+ 'set_x': 'cnv_target_bed',
+ 'value': u'/mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_150bp/BedTrimmer/trimmed_target_bed.txt'}
+{'name': u'vlrd_normalNoise_snp_indels_varRate0.005_150bp',
+ 'set_x': 'target_region_bed',
+ 'value': u'/mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_150bp/BedTrimmer/trimmed_target_bed.txt'}
+{'name': u'vlrd_normalNoise_snp_indels_varRate0.005_150bp',
+ 'set_x': 'target_region_bed',
+ 'value': u'/mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_150bp/BedTrimmer/trimmed_target_bed.txt'}
+{'name': u'vlrd_normalNoise_snp_indels_varRate0.005_150bp',
+ 'set_x': 'truth_set_vcf',
+ 'value': u'/mnt/archive/sim_data/dSim/vlrd_normalNoise_snp_indels_varRate0.005_250bp/VLRD_VCF/norm_merged_truth.vcf.gz'}
+Traceback (most recent call last):
+  File "./dSim.py", line 164, in <module>
+    main(datasets_settings, simulator_settings)
+  File "./dSim.py", line 141, in main
+    return run_pipelines(pipelines_to_run, simulator_settings)
+  File "./dSim.py", line 112, in run_pipelines
+    run_this_pipeline(pipeline)
+  File "./dSim.py", line 85, in run_this_pipeline
+    p.run()
+  File "/home/theoh/git/read_simulator/pipelines/pipelines_base.py", line 109, in run
+    inst.run()
+  File "/home/theoh/git/read_simulator/modules/modules.py", line 258, in run
+    trim_fasta(self)
+  File "/home/theoh/git/read_simulator/lib/common.py", line 119, in trim_fasta
+    run_process(cmd, _module.logger, out_fasta)    
+  File "/home/theoh/git/read_simulator/lib/common.py", line 53, in run_process
+    process.wait()
+  File "/opt/python-2.7/lib/python2.7/subprocess.py", line 1384, in wait
+    pid, sts = _eintr_retry_call(os.waitpid, self.pid, 0)
+  File "/opt/python-2.7/lib/python2.7/subprocess.py", line 476, in _eintr_retry_call
+    return func(*args)
+KeyboardInterrupt

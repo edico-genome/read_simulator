@@ -18,6 +18,7 @@ from lib import bamsurgeon_functions
 from lib import bcftools_functions
 from lib import vlrd_create_vcf
 from lib import rsvsim_create_vcf
+from lib import resample_rsvsim_dups_repeats
 from enum import Enum
 from vlrd import vlrd_functions
 import random
@@ -262,7 +263,7 @@ class BedTrimmer(ModuleBase):
     default_settings = {}
     expected_settings = ["target_chrs", "target_region_bed"]
     promised_outputs = ["target_region_bed"]
-    update_db_keys = ["target_region_bed", "cnv_target_bed"]
+    update_db_keys = ["target_region_bed"]
 
     def run(self):
         # should we only use a subset (e.g. chr20)?
@@ -270,7 +271,7 @@ class BedTrimmer(ModuleBase):
         if target_chrs:
             target_chrs = str(target_chrs)
 
-        if not target_chrs:
+        if (not target_chrs) or (target_chrs.lower() == "all"):
             self.logger.info("Use full bed for simulation")
             return 
 
@@ -324,6 +325,7 @@ class BedTrimmer(ModuleBase):
         # update results
         self.module_settings["target_region_bed"] = new_target_bed
         self.module_settings["cnv_target_bed"] = new_target_bed
+        self.db_api.upload_to_db("cnv_target_bed", new_target_bed)
 
 
 ###########################################################
@@ -407,6 +409,7 @@ class RSVSIM_VCF(CNV_Base):
             full_file_name = os.path.join(src, file_name)
             if (os.path.isfile(full_file_name)):
                 shutil.copy(full_file_name, dest)
+
             
     def create_truth_vcf(self):
         # Rscript $cnvsimultoolsdir/RSVSim_generate_cnv.R \
@@ -427,8 +430,18 @@ class RSVSIM_VCF(CNV_Base):
         # copy to NAS
         self.copy_workdir_to_outdir()
 
-        # truth files ( assumes files are in outdir )
-        csv_files = ["deletions.csv", "insertions.csv", "tandemDuplications.csv"]
+        # update the distrubution for the TANDUPS
+        self.logger.info("Update TANDUP nr repesats with own distribution")
+        dups_file = os.path.join(self.module_settings["outdir"], 
+                                 "tandemDuplications.csv")
+        dups_file_resampled = os.path.join(self.module_settings["outdir"], 
+                                           "tandemDuplications_resampled.csv")
+        resample_rsvsim_dups_repeats.resample_cnv_dup_repeats(
+            dups_file, dups_file_resampled)
+
+        # truth files (files are in outdir )
+        csv_files = ["deletions.csv", "insertions.csv",
+                     "tandemDuplications_resampled.csv"]
         self.create_and_submit_truth_tsv_and_vcf(csv_files)
 
     def run(self):
@@ -548,8 +561,14 @@ class VLRD_VCF_FASTA(ModuleBase):
         if target_region_bed:
             sort_target_region_bed(self)
 
-        vlrd_functions.create_truth_vcf_and_fastas(
-            self.module_settings)
+        # the user may provide the truth vcf
+        vcf = self.module_settings.get("truth_set_vcf", None)
+        if os.path.isfile(vcf):
+            self.logger.info("Truth VCF provided")
+        else:
+            self.logger.info("Create truth VCF")
+            vlrd_functions.create_truth_vcf_and_fastas(
+                self.module_settings)
 
 
 ###########################################################
@@ -562,7 +581,13 @@ class VLRD_VCF(ModuleBase):
     def run(self):
         sort_target_region_bed(self)
         # the module setings will be updated
-        vlrd_create_vcf.create_truth_vcf(self.module_settings)
+        vcf = self.module_settings.get("truth_set_vcf", None)
+        if os.path.isfile(vcf):
+            self.logger.info("Truth VCF provided")
+        else:
+            self.logger.info("Create truth VCF")
+            vlrd_create_vcf.create_truth_vcf(
+                self.module_settings)
 
 
 ###########################################################
@@ -744,16 +769,34 @@ class AltContigVCF(ModuleBase):
 
 ###########################################################
 class Pirs(ModuleBase):
-    default_settings = {
-        "insert-len-mean": 400,
-        "PE100": "/opt/pirs-2.0.1/Profiles/Base-Calling_Profiles/humNew.PE100.matrix.gz",
-        "indels": "/opt/pirs-2.0.1/Profiles/InDel_Profiles/phixv2.InDel.matrix",
-        "gcdep": "/opt/pirs-2.0.1/Profiles/GC-depth_Profiles/humNew.gcdep_100.dat",
-    }
-    expected_settings = ["PE100", "indels", "gcdep", "mod_fasta_1",
-                         "mod_fasta_2", "fasta_file", "coverage"]
+    default_settings = {}
+    expected_settings = ["mod_fasta_1", "mod_fasta_2", 
+                         "fasta_file", "coverage", "read_len"]
     promised_outputs = ["fastq_location_1", "fastq_location_2", "read_info"]
-    update_db_keys = ["fastq_location_1", "fastq_location_2"]
+    update_db_keys = ["fastq_location_1", "fastq_location_2", "gold_roc_flag"]
+
+    def set_profiles(self):
+
+        """
+        base = "/home/theoh/git/read_simulator/pirs_profiles/mason_250"
+        base_q = join(base, "mason.count.matrix")
+        indel_q = join(base, "mason.InDel.matrix")
+        """
+
+        base_q = \
+            "/opt/pirs-2.0.1/Profiles/Base-Calling_Profiles/humNew.PE100.matrix.gz"
+        indel_q = "/opt/pirs-2.0.1/Profiles/InDel_Profiles/phixv2.InDel.matrix"
+        gc_q = "/opt/pirs-2.0.1/Profiles/GC-depth_Profiles/humNew.gcdep_100.dat"
+
+        max_rl = 100
+        if int(self.module_settings['read_len']) > max_rl:
+            raise PipelineExc("read_len must be <= {} bp".format(max_rl))
+
+        join = os.path.join
+        self.module_settings["insert-len-mean"] = 400
+        self.module_settings["snp_err"] = base_q
+        self.module_settings["indel_err"] = indel_q
+        self.module_settings["gcdep"] = gc_q
 
 
     def create_reads(self):
@@ -761,15 +804,15 @@ class Pirs(ModuleBase):
         self.logger.info('Pirs: simulating reads ...')
         pirs_log = os.path.join(self.module_settings['outdir'], "pirs.log")
 
-
-        cmd = "pirs simulate -l 100 -x {coverage} -o {workdir}/pirs" + \
+        cmd = "pirs simulate -l {read_len} -x {coverage} -o {workdir}/pirs" + \
               " --insert-len-mean={insert-len-mean} --insert-len-sd=40 --diploid " + \
-              " --base-calling-profile={PE100}" + \
-              " --indel-error-profile={indels}" + \
-              " --gc-bias-profile={gcdep}" + \
+              " --error-rate=0" + \
               " --phred-offset=33 --no-gc-bias -c gzip " + \
               " -t 48 {mod_fasta_1} {mod_fasta_2} " + \
+              " --gc-bias-profile={gcdep}" + \
               " --no-indel-errors"
+              # " --indel-error-profile={indel_err}"  
+              # " --base-calling-profile={snp_err}"  
 
         self.logger.info('writing log to: {}'.format(pirs_log))
         cmd = cmd.format(**self.module_settings)
@@ -814,9 +857,11 @@ class Pirs(ModuleBase):
         self.copy_workdir_to_outdir("read_info")
 
     def run(self):
+        self.set_profiles()
         self.validate_fastas()
         self.create_reads()
         self.upload_read_info()
+        self.module_settings["gold_roc_flag"] = 1
 
 
 ###########################################################
