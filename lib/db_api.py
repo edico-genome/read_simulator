@@ -35,10 +35,12 @@ class DBAPI(object):
             fasta = self.get_from_db(ref_type, 'fasta_file')
             dbsnp = self.get_from_db(ref_type, 'dbsnp_file')
             dict_file = self.get_from_db(ref_type, 'dict_file')
+            hash6 = self.get_from_db(ref_type, 'hash_table6')
             return {"ref_type": ref_type,
                     "fasta_file": fasta,
                     "dbsnp_file": dbsnp,
-                    "dict_file": dict_file}
+                    "dict_file": dict_file,
+                    "hash_table6": hash6}
         except:
             logger.warning('failed to extract ref info from db')
             raise

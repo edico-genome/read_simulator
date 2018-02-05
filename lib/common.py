@@ -224,7 +224,7 @@ def remove_contig_name_descriptions(_module):
     # only have one process create this file
     _module.lock.acquire()
     basename = os.path.basename(_module.module_settings["fasta_file"])
-    new_fasta = os.path.join(_module.module_settings["shared_dir"], "{}_mod".format(basename))
+    new_fasta = os.path.join(_module.module_settings["shared_dir"], "{}_mod.fasta".format(basename))
     
     # look at first line to determine if we need to process
     with open(_module.module_settings["fasta_file"], 'r') as stream_in:

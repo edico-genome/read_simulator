@@ -173,7 +173,7 @@ class ModuleBase(object):
 
     def get_dataset_ref(self):
         rv = self.db_api.get_dataset_ref_info()
-        keys = ["ref_type", "fasta_file"]
+        keys = ["ref_type", "fasta_file", "hash_table6"]
         for key in keys:
             self.module_settings[key] = rv[key]
             if not self.module_settings[key]:

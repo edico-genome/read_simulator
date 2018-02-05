@@ -211,7 +211,7 @@ class ChrTrimmer(ModuleBase):
     default_settings = {}
     expected_settings = ["truth_set_vcf", 
                          "target_chrs", "shared_dir"]
-    promised_outputs = ["fasta_file", "truth_set_vcf"]
+    promised_outputs = ["fasta_file", "truth_set_vcf", "hash_table6"]
     update_db_keys = ["truth_set_vcf"]
 
     def run(self):
@@ -241,10 +241,11 @@ class ChrTrimmer(ModuleBase):
 class FastaTrimmer(ModuleBase):
     default_settings = {}
     expected_settings = ["target_chrs", "shared_dir"]
-    promised_outputs = ["fasta_file"]
+    promised_outputs = ["fasta_file", "hash_table6"]
 
     def run(self):
         self.get_dataset_ref()
+        assert self.module_settings['hash_table6']
 
         # make sure we have a clean fasta
         remove_contig_name_descriptions(self)
@@ -273,6 +274,11 @@ class BedTrimmer(ModuleBase):
 
         if (not target_chrs) or (target_chrs.lower() == "all"):
             self.logger.info("Use full bed for simulation")
+            target_bed = self.module_settings['target_region_bed']
+            self.module_settings["target_region_bed"] = target_bed
+            self.module_settings["cnv_target_bed"] = target_bed
+            self.db_api.upload_to_db("cnv_target_bed", target_bed)
+            self.db_api.upload_to_db("truth_set_bed", target_bed)
             return 
 
         self.logger.info("Trim BED to small chromosome")
@@ -297,7 +303,6 @@ class BedTrimmer(ModuleBase):
                     vlrd_mode = True
 
         # is this a vlrd bed? then we should only keep paired regions
-        # import pdb; pdb.set_trace()
         if vlrd_mode:
             hist = Counter(array_regions) # e.g. {"2": 3, "54": 3}
             regions_to_keep = []
@@ -326,6 +331,7 @@ class BedTrimmer(ModuleBase):
         self.module_settings["target_region_bed"] = new_target_bed
         self.module_settings["cnv_target_bed"] = new_target_bed
         self.db_api.upload_to_db("cnv_target_bed", new_target_bed)
+        self.db_api.upload_to_db("truth_set_bed", new_target_bed)
 
 
 ###########################################################
@@ -769,53 +775,140 @@ class AltContigVCF(ModuleBase):
 
 ###########################################################
 class Pirs(ModuleBase):
-    default_settings = {}
+    default_settings = {"use_mason_profiles": False,
+                        "insert-len-mean": 900}
+
     expected_settings = ["mod_fasta_1", "mod_fasta_2", 
-                         "fasta_file", "coverage", "read_len"]
+                         "fasta_file", "coverage", "read_len", "use_mason_profiles"]
     promised_outputs = ["fastq_location_1", "fastq_location_2", "read_info"]
     update_db_keys = ["fastq_location_1", "fastq_location_2", "gold_roc_flag"]
 
+
     def set_profiles(self):
+        if self.module_settings.get('use_mason_profiles'):
+            if int(self.module_settings['read_len']) > 400:
+                raise PipelineExc("read_len must be <= {} bp".format(400))
+            self.module_settings["snp_err"] = os.path.join(
+                this_dir_path, '..',
+                'pirs_profiles',
+                'mason_400.count.matrix')
+            self.module_settings["indel_err"] = os.path.join(
+                this_dir_path, '..', 
+                'pirs_profiles',
+                'mason_400.InDel.matrix')
+            self.module_settings["gcdep"] = ""
+        elif self.module_settings.get('gen_new_mason_profiles'):
+            # build mason profiles
+            if not self.module_settings.get('hash_table6'):
+                print "need a hash table"
+                import pdb; pdb.set_trace()
+                sys.exit(1)
 
-        """
-        base = "/home/theoh/git/read_simulator/pirs_profiles/mason_250"
-        base_q = join(base, "mason.count.matrix")
-        indel_q = join(base, "mason.InDel.matrix")
-        """
+            # RUN MASON       
+            self.logger.info('Run Mason')
+ 
+            rl = self.module_settings['read_len']
+            out_path = os.path.join(self.module_settings['outdir'], 
+                                    'mason_{}.fastq'.format(rl))
+            
+            opt = {'read_len': rl,
+                   'out_path': out_path,
+                   'fasta_file': self.module_settings['fasta_file']}
+        
+            cmd="/opt/mason-0.1.2/mason illumina -sq -hn 2 -hs 0 -hi 0 -pi 0.001 "
+            cmd+=" -pd 0.001 -pmm 0.004  -s 7451 "
+            cmd+=" -N 200000 -n {read_len} -ll 600 -le 60 "
+            cmd+=" -o {out_path}"
+            cmd+=" -mp {fasta_file} -rnp TEMP"
+            cmd = cmd.format(**opt)
 
-        base_q = \
-            "/opt/pirs-2.0.1/Profiles/Base-Calling_Profiles/humNew.PE100.matrix.gz"
-        indel_q = "/opt/pirs-2.0.1/Profiles/InDel_Profiles/phixv2.InDel.matrix"
-        gc_q = "/opt/pirs-2.0.1/Profiles/GC-depth_Profiles/humNew.gcdep_100.dat"
+            run_process(cmd, self.logger)
+        
+            self.logger.info('Find the mason generated FQs')
+            fq_list = [os.path.join(self.module_settings["outdir"], 
+                                    'mason_{}_{}.fastq'.format(rl, i)) 
+                       for i in [1,2]]
+            mason_sam = os.path.join(self.module_settings["outdir"], 
+                                     'mason_{}.fastq.sam'.format(rl)) 
 
-        max_rl = 100
-        if int(self.module_settings['read_len']) > max_rl:
-            raise PipelineExc("read_len must be <= {} bp".format(max_rl))
 
-        join = os.path.join
-        self.module_settings["insert-len-mean"] = 400
-        self.module_settings["snp_err"] = base_q
-        self.module_settings["indel_err"] = indel_q
-        self.module_settings["gcdep"] = gc_q
+            # RUN DRAGEN AND GENERATE BAM
+            self.logger.info("Run DRAGEN and generate BAM")
+            opt = {'fq1': fq_list[0],
+                   'fq2': fq_list[1],
+                   'outdir': self.module_settings['outdir'],
+                   'hash_table6': self.module_settings['hash_table6']}
+
+            cmd = "/opt/edico/bin/dragen  -1 {fq1} -2 {fq2} --enable-map-align-output=true  "
+            cmd += "--enable-bam-indexing=true "
+            cmd += "--enable-sort=true --enable-map-align=true  --force --ref-dir={hash_table6} "
+            cmd += "--output-directory={outdir} --output-file-prefix=dragen_mason"
+            cmd = cmd.format(**opt)
+
+            self.lock.acquire()
+            self.logger.info("Running DRAGEN ...")
+            run_process(cmd, self.logger)
+            dragen_bam = os.path.join(self.module_settings['outdir'], 'dragen_mason.bam')
+            self.logger.info("DRAGEN complete")
+            self.lock.release()
+
+        
+            # USE PIRS TO REVERSE ESIMATE THE PROFILES
+            path = os.path.join(self.module_settings['outdir'], "mason_{}".format(rl))
+            opt = {'path': path,
+                   'bam': dragen_bam, 
+                   'ref': self.module_settings['fasta_file']}
+            
+            self.logger.info('calc base quality profile ...')
+            cmd = "/opt/pirs-2.0.1/baseCalling_Matrix_calculator "
+            cmd += "-i {bam} -r {ref} -o {path}"
+            cmd = cmd.format(**opt)
+            run_process(cmd, self.logger)
+            self.logger.info('done')
+
+            self.logger.info('calc indel noise profile ...')
+            cmd = "/opt/pirs-2.0.1/indelstat_sam_bam {bam} {path}"
+            cmd = cmd.format(**opt)
+            run_process(cmd, self.logger)
+            self.logger.info('done')
+
+            # UPDATE PROFILES        
+            rl = self.module_settings['read_len']
+            path = os.path.join(self.module_settings['outdir'], "mason_{}".format(rl))
+            self.module_settings["gcdep"] = ""
+            self.module_settings["snp_err"] = path + ".count.matrix"
+            self.module_settings["indel_err"] = path + ".InDel.matrix"
+        else:
+            self.logger.info("Use Pirs provided profile")
+            if int(self.module_settings['read_len']) > 100:
+                raise PipelineExc("read_len must be <= {} bp".format(100))
+            self.module_settings["snp_err"] = \
+                "/opt/pirs-2.0.1/Profiles/Base-Calling_Profiles" + \
+                "/humNew.PE100.matrix.gz"
+            self.module_settings["indel_err"] = \
+                "/opt/pirs-2.0.1/Profiles/InDel_Profiles/phixv2.InDel.matrix"
+            self.module_settings["gcdep"] = \
+                "/opt/pirs-2.0.1/Profiles/GC-depth_Profiles/humNew.gcdep_100.dat"
 
 
     def create_reads(self):
         # run pirs and create fqs
         self.logger.info('Pirs: simulating reads ...')
         pirs_log = os.path.join(self.module_settings['outdir'], "pirs.log")
-
+        # " --no-indel-errors"
         cmd = "pirs simulate -l {read_len} -x {coverage} -o {workdir}/pirs" + \
               " --insert-len-mean={insert-len-mean} --insert-len-sd=40 --diploid " + \
-              " --error-rate=0" + \
               " --phred-offset=33 --no-gc-bias -c gzip " + \
               " -t 48 {mod_fasta_1} {mod_fasta_2} " + \
-              " --gc-bias-profile={gcdep}" + \
-              " --no-indel-errors"
-              # " --indel-error-profile={indel_err}"  
-              # " --base-calling-profile={snp_err}"  
+              " --indel-error-profile={indel_err} " + \
+              " --base-calling-profile={snp_err} "  
+
+        cmd = cmd.format(**self.module_settings)
+        if self.module_settings['gcdep']:
+            cmd += " --gc-bias-profile={}".format(
+                self.module_settings['gcdep'])
 
         self.logger.info('writing log to: {}'.format(pirs_log))
-        cmd = cmd.format(**self.module_settings)
         run_process(cmd, self.logger, pirs_log)
 
         # put FQs in DB
@@ -940,7 +1033,7 @@ class Mason(ModuleBase):
 ###########################################################
 class Pirs_Tumor(ModuleBase):
     default_settings = {
-        "insert-len-mean": 400,
+        "insert-len-mean": 800,
         "PE100": "/opt/pirs-2.0.1/Profiles/Base-Calling_Profiles/humNew.PE100.matrix.gz",
         "indels": "/opt/pirs-2.0.1/Profiles/InDel_Profiles/phixv2.InDel.matrix",
         "gcdep": "/opt/pirs-2.0.1/Profiles/GC-depth_Profiles/humNew.gcdep_100.dat",
@@ -968,67 +1061,15 @@ class Pirs_Tumor(ModuleBase):
             " --insert-len-mean={insert-len-mean} --insert-len-sd=40 --diploid " + \
             " --base-calling-profile={PE100}" + \
             " --indel-error-profile={indels}" + \
-            " --gc-bias-profile={gcdep}" + \
-            " --phred-offset=33 --no-gc-bias -c gzip " + \
-            " -t 48 {mod_fasta_1} {mod_fasta_2} " + \
-            " --no-indel-errors"
-        tumor_cmd = tumor_cmd.format(**self.module_settings)
+            " --gc-bias-profile={gcdep}" 
+        stream_out.write("RGPL,RGID,RGSM,RGLB,Lane,Read1File,RGCN,Read2File,RGDS,RGDT,RGPI\n")
+        tmp = "DRAGEN_RGPL,DRAGEN_RGID_tumor_{},sim_tumor,ILLUMINA,{}" + \
+              ",{},DRAGEN_RGCN,{},DRAGEN_RGDS,DRAGEN_RGDT,DRAGEN_RGPI\n"
+        line = tmp.format(1, 1, tumor_fqs[0], tumor_fqs[1])
+        stream_out.write(line)
 
-        # non-tumor
-        non_tumor_cmd = \
-            "pirs simulate -l 100 -x {non_tumor_cov} -o {outdir}/pirs_non_tumor" + \
-            " --insert-len-mean={insert-len-mean} --insert-len-sd=40 --diploid " + \
-            " --base-calling-profile={PE100}" + \
-            " --indel-error-profile={indels}" + \
-            " --gc-bias-profile={gcdep}" + \
-            " --phred-offset=33 --no-gc-bias -c gzip " + \
-            " -t 48 {fasta_file} {fasta_file} " + \
-            " --no-indel-errors"
-        non_tumor_cmd = non_tumor_cmd.format(**self.module_settings)
-
-        for cmd in [tumor_cmd, non_tumor_cmd]:
-            run_process(cmd, self.logger)
-
-        # tumor
-        tumor_fqs = []
-        for i in ["1", "2"]:
-            p = os.path.join(
-                self.module_settings["outdir"],
-                'pirs_tumor*{}_{}.fq.gz'.format(
-                    self.module_settings["insert-len-mean"], i))
-            p_res = glob.glob(p)
-            if len(p_res) != 1: 
-                raise PipelineExc(
-                    "Too many/few matching tumor fastqs found in Pirs "
-                    "output folder: {}".format(p_res))
-            tumor_fqs.append(p_res[0])
-
-        # non_tumor
-        non_tumor_fqs = []
-        for i in ["1", "2"]:
-            p = os.path.join(
-                self.module_settings["outdir"],
-                'pirs_non_tumor*{}_{}.fq.gz'.format(
-                    self.module_settings["insert-len-mean"], i))
-            p_res = glob.glob(p)
-            if len(p_res) != 1: 
-                raise PipelineExc(
-                    "Too many/few matching non-tumor fastqs found in Pirs "
-                    "output folder: {}".format(p_res))
-            non_tumor_fqs.append(p_res[0])
-
-        # fq list
-        self.logger.info('Find the pirs generated FQs, create fq list and upload to DB')
-        fq_list = os.path.join(self.module_settings["outdir"], 'tumor_fq_list.csv')
-        with open(fq_list, 'w') as stream_out:
-            stream_out.write("RGPL,RGID,RGSM,RGLB,Lane,Read1File,RGCN,Read2File,RGDS,RGDT,RGPI\n")
-            tmp = "DRAGEN_RGPL,DRAGEN_RGID_tumor_{},sim_tumor,ILLUMINA,{}" + \
-                ",{},DRAGEN_RGCN,{},DRAGEN_RGDS,DRAGEN_RGDT,DRAGEN_RGPI\n"
-            line = tmp.format(1, 1, tumor_fqs[0], tumor_fqs[1])
-            stream_out.write(line)
-
-            line = tmp.format(2, 2, non_tumor_fqs[0], non_tumor_fqs[1])
-            stream_out.write(line)
+        line = tmp.format(2, 2, non_tumor_fqs[0], non_tumor_fqs[1])
+        stream_out.write(line)
         self.db_api.upload_to_db('csv_list', fq_list)
 
 
