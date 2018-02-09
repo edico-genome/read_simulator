@@ -775,8 +775,7 @@ class AltContigVCF(ModuleBase):
 
 ###########################################################
 class Pirs(ModuleBase):
-    default_settings = {"use_mason_profiles": False,
-                        "insert-len-mean": 900}
+    default_settings = {"use_mason_profiles": False}
 
     expected_settings = ["mod_fasta_1", "mod_fasta_2", 
                          "fasta_file", "coverage", "read_len", "use_mason_profiles"]
@@ -810,14 +809,18 @@ class Pirs(ModuleBase):
             rl = self.module_settings['read_len']
             out_path = os.path.join(self.module_settings['outdir'], 
                                     'mason_{}.fastq'.format(rl))
+
+            import random
+            seed = random.randint(7000,8000)
             
             opt = {'read_len': rl,
                    'out_path': out_path,
-                   'fasta_file': self.module_settings['fasta_file']}
+                   'fasta_file': self.module_settings['fasta_file'], 
+                   'seed': seed}
         
             cmd="/opt/mason-0.1.2/mason illumina -sq -hn 2 -hs 0 -hi 0 -pi 0.001 "
-            cmd+=" -pd 0.001 -pmm 0.004  -s 7451 "
-            cmd+=" -N 200000 -n {read_len} -ll 600 -le 60 "
+            cmd+=" -pd 0.001 -pmm 0.004  -s {seed} "
+            cmd+=" -N 500000 -n {read_len} -ll 600 -le 60 "
             cmd+=" -o {out_path}"
             cmd+=" -mp {fasta_file} -rnp TEMP"
             cmd = cmd.format(**opt)
@@ -830,7 +833,6 @@ class Pirs(ModuleBase):
                        for i in [1,2]]
             mason_sam = os.path.join(self.module_settings["outdir"], 
                                      'mason_{}.fastq.sam'.format(rl)) 
-
 
             # RUN DRAGEN AND GENERATE BAM
             self.logger.info("Run DRAGEN and generate BAM")
@@ -893,6 +895,7 @@ class Pirs(ModuleBase):
 
     def create_reads(self):
         # run pirs and create fqs
+        self.module_settings["insert-len-mean"] = 4 * int(self.module_settings["read_len"])
         self.logger.info('Pirs: simulating reads ...')
         pirs_log = os.path.join(self.module_settings['outdir'], "pirs.log")
         # " --no-indel-errors"
