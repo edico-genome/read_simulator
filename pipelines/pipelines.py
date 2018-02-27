@@ -15,9 +15,6 @@ class AltContig(PipelinesBase):
 class CNV_Exomes(PipelinesBase):
     modules = [PrepCNVprobes, FastaTrimmer, CNVgdbVCF, VCF2Fastas, Capsim]
 
-class CNV_WHGs_Mixed(PipelinesBase):
-    modules = [FastaTrimmer, BedTrimmer, CNVgdbVCF, VCF2Fastas, Pirs]
-
 class CNV_WHGs(PipelinesBase):
     modules = [RSVSIM_VCF, ChrTrimmer, VCF2Fastas, Pirs]
 
@@ -27,6 +24,9 @@ class Mason(PipelinesBase):
 class Normal(PipelinesBase):
     modules = [ChrTrimmer, BedTrimmer, VCF2Fastas, Pirs]
     # modules = [FastaTrimmer, BedTrimmer, CleanVCF, VCF2Fastas, Pirs]
+
+class CNV_WHGs_Mixed(PipelinesBase):
+    modules = [FastaTrimmer, BedTrimmer, CNVgdbVCF, VCF2Fastas, Pirs]
 
 class Normal_Exome(PipelinesBase):
     # modules = [CleanVCF, BedTrimmer, VCF2Fastas, Pirs]

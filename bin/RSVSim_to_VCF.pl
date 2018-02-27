@@ -88,6 +88,7 @@ while (my $line = <INFILE>) {
        $pos_base = uc `samtools faidx $fasta $chrom:$pos-$pos | tail -n +2 | tr -d '\n'`;
        $refseq = $pos_base;
        $altseq = $pos_base . substr($seq, 1); 
+       $gtype = "1/1" if (rand(1) <= $prob_hom_del);
 
    } elsif ($var_id =~ /^tandemDuplication/) {
 
@@ -98,6 +99,7 @@ while (my $line = <INFILE>) {
        $refseq = $pos_base;
        $altseq =  $pos_base . $dupseq x $ndups; # pos_base + dup segs
        $info .= ";TDUP=$ndups";
+       $gtype = "1/1" if (rand(1) <= $prob_hom_del);
    } else {
      warn "Variant ID type is invalid: $var_id ...skipping.";
      next;

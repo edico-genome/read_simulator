@@ -138,6 +138,16 @@ class CNV_Base(ModuleBase):
         for f in csv_files:
             assert os.path.isfile(f), "file: {} does not exist".format(f)
 
+            if "tandemDuplications" in f:
+                # update the distrubution for the duplications
+                self.logger.info("Update TANDUP nr repesats with own distribution")
+                dups_file = os.path.join(self.module_settings["outdir"], 
+                                         "tandemDuplications.csv")
+                dups_file_resampled = os.path.join(self.module_settings["outdir"], 
+                                                   "tandemDuplications_resampled.csv")
+                resample_rsvsim_dups_repeats.resample_cnv_dup_repeats(
+                    dups_file, dups_file_resampled)
+
         #try:
         truth_vcf, truth_tsv = rsvsim_create_vcf.create_truth_files(
             self.module_settings["fasta_file"],
@@ -435,15 +445,6 @@ class RSVSIM_VCF(CNV_Base):
 
         # copy to NAS
         self.copy_workdir_to_outdir()
-
-        # update the distrubution for the TANDUPS
-        self.logger.info("Update TANDUP nr repesats with own distribution")
-        dups_file = os.path.join(self.module_settings["outdir"], 
-                                 "tandemDuplications.csv")
-        dups_file_resampled = os.path.join(self.module_settings["outdir"], 
-                                           "tandemDuplications_resampled.csv")
-        resample_rsvsim_dups_repeats.resample_cnv_dup_repeats(
-            dups_file, dups_file_resampled)
 
         # truth files (files are in outdir )
         csv_files = ["deletions.csv", "insertions.csv",

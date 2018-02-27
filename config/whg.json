@@ -21,7 +21,7 @@
     "num_runs": 2,
     "start_idx": 1,
     "pipeline_name": "Normal",
-    "dataset_name": "dsim_masonNoise_10X_whg_50bp_4xIns",
+    "dataset_name": "dsim_masonNoise_10X_whg_49bp_4xIns",
     "reference": "hs37d5",
     "outdir": "/mnt/archive/sim_data/dSim",
     "workdir": "/staging/tmp",
@@ -29,17 +29,17 @@
     "useIndelErrors": 1,
     "target_chrs": "",
     "coverage": "30",
-    "read_len": "50",
+    "read_len": "49",
     "target_region_bed": "/mnt/archive/varunj/MRJD_BedFiles/hs37d5.SegDupTable_sorted_v3.bed",
     "truth_set_vcf": 
       "/mnt/archive/customer_data/10xg/dragen_NA12878_10XG_remap.phased.chr1-22_X_hs37d5.vcf.gz",
     "gen_new_mason_profiles": 1
   },
   {
-    "num_runs": 0,
+    "num_runs": 2,
     "start_idx": 0,
     "pipeline_name": "Normal",
-    "dataset_name": "dsim_masonNoise_10X_whg_100bp_4xIns",
+    "dataset_name": "dsim_masonNoise_10X_whg_51bp_4xIns",
     "reference": "hs37d5",
     "outdir": "/mnt/archive/sim_data/dSim",
     "workdir": "/staging/tmp",
@@ -47,7 +47,7 @@
     "useIndelErrors": 1,
     "target_chrs": "",
     "coverage": "30",
-    "read_len": "100",
+    "read_len": "51",
     "target_region_bed": "/mnt/archive/varunj/MRJD_BedFiles/hs37d5.SegDupTable_sorted_v3.bed",
     "truth_set_vcf": 
       "/mnt/archive/customer_data/10xg/dragen_NA12878_10XG_remap.phased.chr1-22_X_hs37d5.vcf.gz",

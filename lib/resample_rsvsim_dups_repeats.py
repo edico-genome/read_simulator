@@ -3,12 +3,13 @@ import numpy as np
 import collections
 
 def get_dist():
-    dist = collections.OrderedDict()
+    # dist = collections.OrderedDict()
     # "repeats"  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-    dist["1-1K"] = (1e3, [0.4, 0.15, 0.1, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05])
-    dist["1K-10K"] = (1e4, [0.45, 0.2, 0.1, 0.05, 0.05, 0.05, 0.05, 0.05, 0,  0])
-    dist["10K-100K"] = (1e5, [0.6, 0.2, 0.1, 0.05, 0.05, 0, 0, 0, 0, 0])
-    dist["100K-Inf"] = (float('inf'), [0.7, 0.2, 0.1, 0, 0, 0, 0, 0, 0, 0])
+    # dist["1-1K"] = (1e3, [0.4, 0.15, 0.1, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05])
+    # dist["1K-10K"] = (1e4, [0.45, 0.2, 0.1, 0.05, 0.05, 0.05, 0.05, 0.05, 0,  0])
+    # dist["10K-100K"] = (1e5, [0.6, 0.2, 0.1, 0.05, 0.05, 0, 0, 0, 0, 0])
+    # dist["100K-Inf"] = (float('inf'), [0.7, 0.2, 0.1, 0, 0, 0, 0, 0, 0, 0])
+    dist = [0.6, 0.4]
     return dist
 
 
@@ -35,9 +36,9 @@ def resample_cnv_dup_repeats(file_in, file_out):
                     print "unexpected line: ", line
                     raise
 
-            interval = get_interval(event_len, line, dist)
-            d = dist[interval][1]
-            copies = str(np.random.choice(np.arange(1,11), p=d))
+            #interval = get_interval(event_len, line, dist)
+            # d = dist[interval][1]
+            copies = str(np.random.choice(np.arange(1,3), p=dist))
             ss[6] = copies
             stream_out.write("\t".join(ss)+"\n")            
             print "len: %s %s" % (event_len, copies)

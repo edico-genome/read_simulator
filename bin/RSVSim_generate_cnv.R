@@ -80,7 +80,7 @@ if ( mode == 1 ){
   sim = simulateSV(
     output=outdir, chrs=c(target_chrs), ins=nr_ins, sizeIns=size_ins, 
     dels=nr_dels, sizeDels=size_del, dups=nr_dups, sizeDups=size_dup,
-    maxDups=10, verbose=TRUE, repeatBias=TRUE)
+    maxDups=3, verbose=TRUE, repeatBias=TRUE)
 
 } else {
 
