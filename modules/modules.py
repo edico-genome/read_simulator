@@ -134,6 +134,7 @@ class CNV_Base(ModuleBase):
 
         self.logger.info("RSVSim create truth files")
         csv_files = [os.path.join(self.module_settings["outdir"], csv) for csv in csv_files]
+        resampled_csv_files = []
         
         for f in csv_files:
             assert os.path.isfile(f), "file: {} does not exist".format(f)
@@ -148,12 +149,13 @@ class CNV_Base(ModuleBase):
                 resample_rsvsim_dups_repeats.resample_cnv_dup_repeats(
                     dups_file, dups_file_resampled)
 
-        #try:
+                resampled_csv_files.append(dups_file_resampled)
+            else:
+                resampled_csv_files.append(f)
+
         truth_vcf, truth_tsv = rsvsim_create_vcf.create_truth_files(
             self.module_settings["fasta_file"],
-            self.module_settings['outdir'], csv_files, self.logger)
-        #except Exception as e:
-        #    raise PipelineExc("Failed to create truth files: {}".format(e))
+            self.module_settings['outdir'], resampled_csv_files, self.logger)
 
         # update db
         self.module_settings['cnv_truth'] = truth_tsv
@@ -778,7 +780,7 @@ class AltContigVCF(ModuleBase):
 class Pirs(ModuleBase):
     default_settings = {"use_mason_profiles": False}
 
-    expected_settings = ["mod_fasta_1", "mod_fasta_2", 
+    expected_settings = ["mod_fasta_1", "mod_fasta_2", "gc_bias",
                          "fasta_file", "coverage", "read_len", "use_mason_profiles"]
     promised_outputs = ["fastq_location_1", "fastq_location_2", "read_info"]
     update_db_keys = ["fastq_location_1", "fastq_location_2", "gold_roc_flag"]
@@ -902,15 +904,17 @@ class Pirs(ModuleBase):
         # " --no-indel-errors"
         cmd = "pirs simulate -l {read_len} -x {coverage} -o {workdir}/pirs" + \
               " --insert-len-mean={insert-len-mean} --insert-len-sd=40 --diploid " + \
-              " --phred-offset=33 --no-gc-bias -c gzip " + \
+              " --phred-offset=33 -c gzip " + \
               " -t 48 {mod_fasta_1} {mod_fasta_2} " + \
               " --indel-error-profile={indel_err} " + \
               " --base-calling-profile={snp_err} "  
 
         cmd = cmd.format(**self.module_settings)
-        if self.module_settings['gcdep']:
+        if self.module_settings['gc_bias']:
             cmd += " --gc-bias-profile={}".format(
                 self.module_settings['gcdep'])
+        else:
+            cmd += " --no-gc-bias "
 
         self.logger.info('writing log to: {}'.format(pirs_log))
         run_process(cmd, self.logger, pirs_log)
