@@ -162,4 +162,3 @@ if __name__ == '__main__':
     datasets_settings = Settings(args.run_settings)
     datasets_settings.print_settings()
     main(datasets_settings, simulator_settings)
-

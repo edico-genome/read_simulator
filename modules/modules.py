@@ -133,7 +133,8 @@ class CNV_Base(ModuleBase):
         """ create truth files """
 
         self.logger.info("RSVSim create truth files")
-        csv_files = [os.path.join(self.module_settings["outdir"], csv) for csv in csv_files]
+        csv_files = [
+            os.path.join(self.module_settings["outdir"], csv) for csv in csv_files]
         resampled_csv_files = []
         
         for f in csv_files:
