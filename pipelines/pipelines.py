@@ -13,10 +13,20 @@ class AltContig(PipelinesBase):
     modules = [AltContigVCF, Pirs]
 
 class CNV_Exomes(PipelinesBase):
-    modules = [PrepCNVprobes, FastaTrimmer, CNVgdbVCF, VCF2Fastas, Capsim]
+    modules = [FilterCnvProbesAndBuildTargetBed, FastaTrimmer, 
+               RsvsimGdbVcf, VCF2Fastas, Capsim]
 
+class CNV_Exomes_PON(PipelinesBase):
+    modules = [FilterCnvProbesAndBuildTargetBed, FastaTrimmer, 
+               CleanVCF, VCF2Fastas, Capsim]
+
+class Normal_Exome(PipelinesBase):
+    modules = [CleanVCF, BedTrimmer, VCF2Fastas, Pirs]
+
+'''
 class CNV_WHGs(PipelinesBase):
     modules = [RSVSIM_VCF, ChrTrimmer, VCF2Fastas, Pirs]
+'''
 
 class Mason(PipelinesBase):
     modules = [CleanVCF, ChrTrimmer, Mason]
@@ -26,11 +36,7 @@ class Normal(PipelinesBase):
     # modules = [FastaTrimmer, BedTrimmer, CleanVCF, VCF2Fastas, Pirs]
 
 class CNV_WHGs_Mixed(PipelinesBase):
-    modules = [FastaTrimmer, BedTrimmer, CNVgdbVCF, VCF2Fastas, Pirs]
-
-class Normal_Exome(PipelinesBase):
-    # modules = [CleanVCF, BedTrimmer, VCF2Fastas, Pirs]
-    modules = [PrepCNVprobes, FastaTrimmer, CleanVCF, VCF2Fastas, Capsim]
+    modules = [FastaTrimmer, BedTrimmer, RsvsimGdbVcf, VCF2Fastas, Pirs]
 
 class Tumor(PipelinesBase):
     modules = [ChrTrimmer, VCF2BamsurgeonBed, Bamsurgeon]

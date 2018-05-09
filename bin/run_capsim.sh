@@ -90,14 +90,8 @@ echo "Processing $probe_file "
 cmd="bowtie2-build $mod_fasta1 $outdir/bowtie_ref1"; run "$cmd"
 cmd="bowtie2-build $mod_fasta2 $outdir/bowtie_ref2"; run "$cmd"
 
-cmd="bowtie2 --local --very-sensitive-local --mp 8 --rdg 10,8 --rfg 10,8 -k 10000 -f -x $outdir/bowtie_ref1 -U $probe_file -S $outdir/probes.sam"; run "$cmd"
-cmd="bowtie2 --local --very-sensitive-local --mp 8 --rdg 10,8 --rfg 10,8 -k 10000 -f -x $outdir/bowtie_ref2 -U $probe_file -S $outdir/probes.sam"; run "$cmd"
-
-# cmd="samtools view -b $outdir/probes.sam | samtools sort -o $outdir/probes.bam"; run "$cmd"
-cmd="samtools sort $outdir/probes.sam $outdir/probes_sorted"; run "$cmd"
-cmd="samtools index $outdir/probes_sorted.bam"; run "$cmd"
-
-capsim_options=" --probe $outdir/probes_sorted.bam --ID someid --fmedian $FRAG_LENGTH --miseq $outdir/output --illen $READ_LENGTH --num $N_READS "
+cmd="bowtie2 --local --very-sensitive-local --mp 8 --rdg 10,8 --rfg 10,8 -k 10000 -f -x $outdir/bowtie_ref1 -U $probe_file -S $outdir/probes_1.sam"; run "$cmd"
+cmd="bowtie2 --local --very-sensitive-local --mp 8 --rdg 10,8 --rfg 10,8 -k 10000 -f -x $outdir/bowtie_ref2 -U $probe_file -S $outdir/probes_2.sam"; run "$cmd"
 
 # set java
 ORIGINAL_PATH="$PATH"
@@ -105,37 +99,50 @@ echo "Set Java Version: 1.8.0"
 export PATH="/usr/java/jdk1.8.0_72/jre/bin:$PATH"
 echo "Export PATH : $PATH"
 
+# simulate 2 haplotypes
+########################################
+# hap 1
+cmd="samtools sort $outdir/probes_1.sam $outdir/probes_1_sorted"; run "$cmd"
+cmd="samtools index $outdir/probes_1_sorted.bam"; run "$cmd"
 
-# run for 1st haplotype
-cmd="$JAPSA_CAPSIM --reference $mod_fasta1 $capsim_options --logFile $outdir/capsim1.log "; run "$cmd"
-# cmd="mv $outdir/output_1.fastq.gz $outdir/output_ref1_1.fastq.gz"; run "$cmd"
-# cmd="mv $outdir/output_2.fastq.gz $outdir/output_ref1_2.fastq.gz"; run "$cmd"
+capsim_options1=" --probe $outdir/probes_1_sorted.bam --ID someid --fmedian $FRAG_LENGTH "
+capsim_options1+=" --miseq $outdir/output --illen $READ_LENGTH --num $N_READS "
 
-# run for 2nd haplotype
-# cmd="$JAPSA_CAPSIM --reference $mod_fasta2 $capsim_options --logFile $outdir/capsim2.log "; run "$cmd"
-# cmd="mv $outdir/output_1.fastq.gz $outdir/output_ref2_1.fastq.gz"; run "$cmd"
-# cmd="mv $outdir/output_2.fastq.gz $outdir/output_ref2_2.fastq.gz"; run "$cmd"
+cmd="$JAPSA_CAPSIM --reference $mod_fasta1 $capsim_options1 --logFile $outdir/capsim1.log "; run "$cmd"
+
+cmd="mv $outdir/output_1.fastq.gz $outdir/output_ref1_1.fastq.gz"; run "$cmd"
+cmd="mv $outdir/output_2.fastq.gz $outdir/output_ref1_2.fastq.gz"; run "$cmd"
+
+
+########################################
+# hap 2
+cmd="samtools sort $outdir/probes_2.sam $outdir/probes_2_sorted"; run "$cmd"
+cmd="samtools index $outdir/probes_2_sorted.bam"; run "$cmd"
+
+capsim_options2=" --probe $outdir/probes_2_sorted.bam --ID someid --fmedian $FRAG_LENGTH "
+capsim_options2+=" --miseq $outdir/output --illen $READ_LENGTH --num $N_READS "
+
+cmd="$JAPSA_CAPSIM --reference $mod_fasta2 $capsim_options2 --logFile $outdir/capsim2.log "; run "$cmd"
+
+cmd="mv $outdir/output_1.fastq.gz $outdir/output_ref2_1.fastq.gz"; run "$cmd"
+cmd="mv $outdir/output_2.fastq.gz $outdir/output_ref2_2.fastq.gz"; run "$cmd"
+
+
+# merge results
+echo "Merge Results"
+# fq1
+cmd="cat $outdir/output_ref1_1.fastq.gz $outdir/output_ref2_1.fastq.gz"
+echo "$cmd > $outdir/capsim_1.fastq.gz"
+$cmd > $outdir/capsim_1.fastq.gz
+
+# fq2
+cmd="cat $outdir/output_ref1_2.fastq.gz $outdir/output_ref2_2.fastq.gz"
+echo "$cmd > $outdir/capsim_2.fastq.gz"
+$cmd > $outdir/capsim_2.fastq.gz
+
 
 # reset java
 echo "Reset Java to original version"
 export PATH="$ORIGINAL_PATH"
 
-
-# merge results
-# fq1
-# cmd="cat $outdir/output_ref1_1.fastq.gz $outdir/output_ref2_1.fastq.gz"
-# echo "$cmd > $outdir/capsim_1.fastq.gz"
-# $cmd > $outdir/capsim_1.fastq.gz
-
-# fq2
-# cmd="cat $outdir/output_ref1_2.fastq.gz $outdir/output_ref2_2.fastq.gz"
-# echo "$cmd > $outdir/capsim_2.fastq.gz"
-# $cmd > $outdir/capsim_2.fastq.gz
-
 echo "done"
-
-
-
-
-
-

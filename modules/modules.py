@@ -30,9 +30,20 @@ from collections import Counter
 this_dir_path = os.path.dirname(os.path.realpath(__file__))
 
 ###########################################################
-class PrepCNVprobes(ModuleBase):
+class FilterCnvProbesAndBuildTargetBed(ModuleBase):
+    """
+    filter the probes file to only include probes from the target contig
+    also build target bed from probes file
+
+    Example probes file:
+    >chr20:68259-68454
+    ATGATAGACCA...
+    >chr20:76636-77230
+    TCTCTACAGGTAGCTTTGA...
+    """
+
     default_settings = {}
-    expected_settings = ["target_chrs"]
+    expected_settings = ["target_chr"]
     promised_outputs = ["target_region_bed", "exome_probes"]
     update_db_keys = ["target_region_bed", "cnv_target_bed"]
 
@@ -41,16 +52,19 @@ class PrepCNVprobes(ModuleBase):
         probes = probes[0]
         self.logger.info("selected probe file: {}".format(probes))
 
-        # add target chrs info
-        target_chrs = self.module_settings["target_chrs"]
-        assert not isinstance(target_chrs, list)
-        target_chrs = str(target_chrs)
-        target_chrs = "chr{}".format(target_chrs.replace("chr", ""))
-        if not target_chrs in ["chr{}".format(str(i)) for i in range(1,22)]:
-            print "Target chr: {}, not valid selection".format(target_chrs)
-        self.module_settings["target_chrs"] = target_chrs
+        # inspect target chr
+        # make compatible with hg19 (force "chr")
+        # make sure only one contig
+        target_chr = self.module_settings["target_chr"]
+        assert not isinstance(target_chr, list)
+        target_chr = str(target_chr)
+        # and make sure we only simulate contigs 1-22
+        target_chr = "chr{}".format(target_chr.replace("chr", ""))
+        if not target_chr in ["chr{}".format(str(i)) for i in range(1,22)]:
+            print "Target chr: {}, not valid selection".format(target_chr)
+        self.module_settings["target_chr"] = target_chr
 
-        # new out files
+        # build the target bed from the probe file
         target_region_bed = os.path.join(self.module_settings["outdir"],
                                          "target_region_bed.txt")
 
@@ -66,23 +80,22 @@ class PrepCNVprobes(ModuleBase):
             target_header = False
 
             for line in stream_in:
-                if target_header:
+                if target_header: # prev line was like this: ">chr20:68259-68454"
                     stream_probes_out.write(line)
                     target_header = False
-                elif self.module_settings["target_chrs"] in line.split()[0]:
+                elif self.module_settings["target_chr"] in line.split()[0]:
                     target_header = True
                     # probes file
                     stream_probes_out.write(line)
                     # bed
                     _from, _to = line.split(":")[1].split("-")
                     stream_bed_out.write("{}\t{}\t{}".format(
-                            self.module_settings["target_chrs"],
+                            self.module_settings["target_chr"],
                             _from, _to))
                     line_counter += 1
                                          
         except Exception as e:
-            raise PipelineExc("Failed to create filtered probe files: {}"
-                              "".format(e))
+            raise PipelineExc("Failed to create filtered probe files: {}".format(e))
         finally:
             stream_in.close()
             stream_bed_out.close()
@@ -94,25 +107,19 @@ class PrepCNVprobes(ModuleBase):
         self.module_settings["exome_probes"] = exome_probes
      
 
-
 ###########################################################
-class CNV_Base(ModuleBase):
-    default_settings = {}
+class RsvsimGdbVcf(ModuleBase):
+    dgv_file = "/mnt/archive/sim_data/ref_data/cnv/GRCh37_hg19_variants_2016-05-15.txt"
+    default_settings = {"DGV": dgv_file}
     expected_settings = [
-        "nHomozygousDeletions",
-        "nHeterozygousDeletions",
-        "nTandemDuplications", 
-        "outdir", "workdir", 
-        "target_chrs"]
-    promised_outputs = [
-        'fasta_file',
-        'cnv_truth',
-        'truth_set_vcf']
-
-
-    def get_refs(self):
-        self.get_dataset_ref()
-
+        "nr_dels",
+        "nr_dups",
+        "nr_ins",
+        "outdir",
+        "target_chr",
+        "target_region_bed"]
+    update_db_keys = ["cnv_target_bed"]
+    promised_outputs = ['cnv_truth', 'truth_set_vcf', "cnv_target_bed"]
 
     def add_contig_names_to_target_bed(self):
         self.module_settings['target_bed_contigs_named'] = "{}_contigs_named".format(
@@ -164,6 +171,38 @@ class CNV_Base(ModuleBase):
 
         self.db_api.upload_to_db('cnv_truth', truth_tsv)
         self.db_api.upload_to_db('truth_set_vcf', truth_vcf)
+
+
+    def run(self):
+        self.get_dataset_ref()        
+
+        # update cnv target bed
+        self.module_settings["cnv_target_bed"] = self.module_settings[
+            "target_region_bed"]
+
+        _log = os.path.join(self.module_settings['outdir'], "rsvsim.log")
+        _mod_fastas_script = os.path.join(
+            this_dir_path, "..", "bin", "cnv_exome_variant_simulator.R")
+
+        cmd = "/usr/bin/Rscript "
+        cmd += _mod_fastas_script
+        cmd += " --nrDeletions {nr_dels}"
+        cmd += " --nrDuplications {nr_dups}"
+        cmd += " --outdir {outdir}"
+        cmd += " --fasta {fasta_file}"
+        cmd += " --target_chr {target_chr}"
+        cmd += " --target_bed {target_region_bed}"
+        cmd += " --DGV {DGV}"
+        cmd = cmd.format(**self.module_settings)
+
+        run_process(cmd, self.logger, outfile=None, 
+                    _cwd=self.module_settings['outdir'])
+        
+        self.logger.info("RSVSim completed")
+
+        # create truth
+        csv_files = ["deletions.csv", "tandemDuplications.csv"]
+        self.create_and_submit_truth_tsv_and_vcf(csv_files)
 
 
 ###########################################################
@@ -223,7 +262,7 @@ class Bamsurgeon(ModuleBase):
 class ChrTrimmer(ModuleBase):
     default_settings = {}
     expected_settings = ["truth_set_vcf", 
-                         "target_chrs", "shared_dir"]
+                         "target_chr", "shared_dir"]
     promised_outputs = ["fasta_file", "truth_set_vcf", "hash_table6"]
     update_db_keys = ["truth_set_vcf"]
 
@@ -233,7 +272,7 @@ class ChrTrimmer(ModuleBase):
         # make sure we have a clean fasta
         remove_contig_name_descriptions(self)
 
-        if not self.module_settings.get("target_chrs", None):
+        if not self.module_settings.get("target_chr", None):
             self.logger.info("Use full FASTA and VCF for simulation")
             return 
 
@@ -253,7 +292,7 @@ class ChrTrimmer(ModuleBase):
 ###########################################################
 class FastaTrimmer(ModuleBase):
     default_settings = {}
-    expected_settings = ["target_chrs", "shared_dir"]
+    expected_settings = ["target_chr", "shared_dir"]
     promised_outputs = ["fasta_file", "hash_table6"]
 
     def run(self):
@@ -263,8 +302,8 @@ class FastaTrimmer(ModuleBase):
         # make sure we have a clean fasta
         remove_contig_name_descriptions(self)
 
-        target_chrs = self.module_settings.get("target_chrs", None)
-        if ( not target_chrs ) or ( target_chrs == "ALL" ):
+        target_chr = self.module_settings.get("target_chr", None)
+        if ( not target_chr ) or ( target_chr == "ALL" ):
             self.logger.info("Use full FASTA for simulation")
         else:
             # if we should only use a subset (e.g. chr20) 
@@ -275,17 +314,17 @@ class FastaTrimmer(ModuleBase):
 ###########################################################
 class BedTrimmer(ModuleBase):
     default_settings = {}
-    expected_settings = ["target_chrs", "target_region_bed"]
+    expected_settings = ["target_chr", "target_region_bed"]
     promised_outputs = ["target_region_bed"]
     update_db_keys = ["target_region_bed"]
 
     def run(self):
         # should we only use a subset (e.g. chr20)?
-        target_chrs = self.module_settings.get("target_chrs", None)
-        if target_chrs:
-            target_chrs = str(target_chrs)
+        target_chr = self.module_settings.get("target_chr", None)
+        if target_chr:
+            target_chr = str(target_chr)
 
-        if (not target_chrs) or (target_chrs.lower() == "all"):
+        if (not target_chr) or (target_chr.lower() == "all"):
             self.logger.info("Use full bed for simulation")
             target_bed = self.module_settings['target_region_bed']
             self.module_settings["target_region_bed"] = target_bed
@@ -301,12 +340,12 @@ class BedTrimmer(ModuleBase):
 
         with open(self.module_settings["target_region_bed"]) as stream:          
             for line in stream:
-                # target_chrs can be an array or single string
-                if type(target_chrs) in [unicode, str]:
-                    if line.split()[0] != target_chrs:
+                # target_chr can be an array or single string
+                if type(target_chr) in [unicode, str]:
+                    if line.split()[0] != target_chr:
                         continue
                 else:
-                    if line.split()[0] not in target_chrs:
+                    if line.split()[0] not in target_chr:
                         continue
                 
                 # lines to keep
@@ -409,100 +448,6 @@ class VCF2Fastas(ModuleBase):
 
     def run(self):
         self.create_fastas()
-        
-
-###########################################################
-class RSVSIM_VCF(CNV_Base):
-    expected_settings = [
-        "size_ins", "size_dels", "size_dups", 
-        "nr_ins", "nr_dels", "nr_dups",
-        "outdir", "workdir", "target_chrs", "shared_dir", "cnv_target_bed"]
-    update_db_keys = ["cnv_target_bed", "truth_set_vcf"]
-    promised_outputs = ["truth_set_vcf", "fasta_file"]
-
-    def copy_workdir_to_outdir(self):
-        src = self.module_settings["workdir"]
-        dest = self.module_settings["outdir"]
-        src_files = os.listdir(src)
-        for file_name in src_files:
-            full_file_name = os.path.join(src, file_name)
-            if (os.path.isfile(full_file_name)):
-                shutil.copy(full_file_name, dest)
-
-            
-    def create_truth_vcf(self):
-        # Rscript $cnvsimultoolsdir/RSVSim_generate_cnv.R \
-        #     $chrom $gencnvdir $sizeins $sizedel $sizedup
-        _rsv_script = os.path.join(this_dir_path, "cnv_whg", "RSVSim_generate_cnv.R")
-        cmd = _rsv_script
-        cmd += " --outdir {workdir}"
-        cmd += " --size_ins {size_ins}"
-        cmd += " --size_del {size_dels}"
-        cmd += " --size_dup {size_dups}"
-        cmd += " --nr_ins {nr_ins}"
-        cmd += " --nr_dels {nr_dels}"
-        cmd += " --nr_dups {nr_dups}"
-        cmd += " --target_chrs {target_chrs}"
-        cmd = cmd.format(**self.module_settings)
-        run_process(cmd, self.logger)
-
-        # copy to NAS
-        self.copy_workdir_to_outdir()
-
-        # truth files (files are in outdir )
-        csv_files = ["deletions.csv", "insertions.csv",
-                     "tandemDuplications_resampled.csv"]
-        self.create_and_submit_truth_tsv_and_vcf(csv_files)
-
-    def run(self):
-        self.get_dataset_ref()
-        self.create_truth_vcf()
-  
-
-###########################################################
-class CNVgdbVCF(CNV_Base):
-    default_settings = {}
-    expected_settings = [
-        "nr_dels",
-        "nr_dups",
-        "nr_ins",
-        "outdir",
-        "target_chrs",
-        "target_region_bed"]
-    update_db_keys = ["cnv_target_bed"]
-    promised_outputs = ['cnv_truth', 'truth_set_vcf', "cnv_target_bed"]
-
-    def run(self):
-        self.module_settings["DGV"] = "/mnt/archive/sim_data" + \
-            "/ref_data/cnv/GRCh37_hg19_variants_2016-05-15.txt"
-
-        # update cnv target bed
-        self.module_settings["cnv_target_bed"] = \
-            self.module_settings["target_region_bed"]
-
-        _mod_fastas_script = os.path.join(
-            this_dir_path, "..", "bin", "cnv_exome_variant_simulator.R")
-
-        _log = os.path.join(self.module_settings['outdir'], "rsvsim.log")
-
-        cmd = "/usr/bin/Rscript "
-        cmd += _mod_fastas_script
-        cmd += " --nrDeletions {nr_dels}"
-        cmd += " --nrDuplications {nr_dups}"
-        cmd += " --outdir {outdir}"
-        cmd += " --fasta {fasta_file}"
-        cmd += " --target_chrs {target_chrs}"
-        cmd += " --target_bed {target_region_bed}"
-        cmd += " --DGV {DGV}"
-        cmd = cmd.format(**self.module_settings)
-        run_process(cmd, self.logger, outfile=None, 
-                    _cwd=self.module_settings['outdir'])
-        
-        self.logger.info("RSVSim completed")
-
-        # create truth
-        csv_files = ["deletions.csv", "tandemDuplications.csv"]
-        self.create_and_submit_truth_tsv_and_vcf(csv_files)
 
 
 ###########################################################
@@ -520,38 +465,78 @@ class Capsim(ModuleBase):
                       "gold_roc_flag"]
 
     def run(self):
-        # run
+        import pdb; pdb.set_trace()
         self.logger.info('Capsim: simulating reads ...')
-        script_path = os.path.join(this_dir_path, "../bin", "run_capsim.sh")
-        log = os.path.join(self.module_settings['outdir'], "capsim.log")
-        self.module_settings['capsim_log'] = log
+
+        for idx in [1,2]:
+            self.logger.info("Simulate haplotype {}".format(idx))
+            self.logger.info("")
+            self.module_settings['hap_idx'] = idx
+            
+            # build reference
+            self.logger.info('Build bowtie2 reference')
+            bowtie_ref = os.path.join(
+                self.module_settings["outdir"], "bowtie_ref_{}".format(idx))
+            mod_fasta = self.module_settings["mod_fasta_{}".format(idx)]
+            cmd = "bowtie2-build {} {}".format(mod_fasta, bowtie_ref)
+            run_process(cmd, self.logger)
            
-        # build cmd
-        cmd = script_path + \
-            " -n {number-of-reads}" + \
-            " -l {read-len}" + \
-            " -f {fragment-size}" + \
-            " -o {outdir}" + \
-            " -1 {mod_fasta_1} -2 {mod_fasta_2}" + \
-            " -p {exome_probes} "
-        cmd = cmd.format(**self.module_settings)
-        
-        run_process(cmd, self.logger)
+            # align probes
+            self.logger.info('Aligning probe file')
+            probes_in = self.module_settings['probe_file']
+            probes_aligned_to_this_ref = os.path.join(
+                self.module_settings['outdir'], 'probes_{}.sam'.format(idx))
+            cmd = "bowtie2 --local --very-sensitive-local --mp 8 --rdg 10,8 --rfg 10,8 -k 10000 "
+            cmd += " -f -x {} -U {} -S {}"
+            cmd = cmd.format(bowtie_ref, probes_in, probes_aligned_to_this_ref)
+            run_process(cmd, self.logger)
+            
+            # sort the probe bam
+            probes_aligned_to_this_ref_sorted = os.path.join(
+                self.module_settings['outdir'], 'probes_sorted_{}.sam'.format(idx))
+            cmd = "export PATH=/usr/java/jdk1.8.0_72/jre/bin:$PATH; samtools sort {} {}"
+            cmd = cmd.format(probes_aligned_to_this_ref, probes_aligned_to_this_ref_sorted)
+            run_process(cmd, self.logger)
+
+            # index the bam
+            cmd="samtools index {}".format(probes_aligned_to_this_ref_sorted)
+            run_process(cmd, self.logger)
+
+            # simulate reads
+            cmd = "/home/gavinp/.usr/local/bin/jsa.sim.capsim --reference {} --probe {}".format(
+                mod_fasta, probes_aligned_to_this_ref_sorted)
+            cmd += " --ID someid --fmedian {fragment-size} --miseq {outdir}/output "
+            cmd += " --illen {read-len} --num {number-of-reads} "
+            cmd = cmd.format(**self.module_settings)
+            run_process(cmd, self.logger)
+
+            cmd="mv {outdir}/output_1.fastq.gz {outdir}/output_ref_{hap_idx}_1.fastq.gz".format(
+                **self.module_settings)
+            run_process(cmd, self.logger)
+
+            cmd="mv {outdir}/output_2.fastq.gz {outdir}/output_ref_{hap_idx}_2.fastq.gz".format(
+                **self.module_settings)
+            run_process(cmd, self.logger)
+
+        # merge results
+        self.logger.info("Merge Results")
+        for fq_idx in [1, 2]:
+            self.module_settings['fq_idx'] = idx
+
+            # fq 1/2
+            cmd = "cat {outdir}/output_ref_1_{fq_idx}.fastq.gz {outdir}/output_ref_2_{fq_idx}.fastq.gz "
+            cmd += " > {outdir}/capsim_{fq_idx}.fastq.gz"
+            cmd = cmd.format(**self.module_settings)
+            run_process(cmd)       
+            
+            fq_key = "fastq_location_{}".format(fq_idx)
+            self.module_settings[fq_key] = "{outdir}/capsim_{fq_idx}.fastq.gz".format(self.module_settings)
 
         # update db with results
-        self.logger.info('find the Capsim generated FQs and upload to DB')
-        fq_lists = []
-        for i in ["1", "2"]:
-            p = os.path.join(self.module_settings["outdir"], 
-                             'output_%s.fastq.gz' % i)
-            fq_lists.append(glob.glob(p))
-
-        self.module_settings["fastq_location_1"] = fq_lists[0][0]
-        self.module_settings["fastq_location_2"] = fq_lists[1][0]
         self.module_settings["fastq_offser_override"] = 1
         self.module_settings["gold_roc_flag"] = 1
         self.module_settings["fastq_offser_override_detail"] = 33
-
+        self.logger.info('Upload Capsim results to DB')
 
 ###########################################################
 class VLRD_VCF_FASTA(ModuleBase):

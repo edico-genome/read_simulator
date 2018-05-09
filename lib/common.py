@@ -103,19 +103,19 @@ def trim_fasta(_module):
     if we should only use a subset of the input fasta
     useful e.g. if we want to speed up analyses
     """
-    target_chrs = _module.module_settings['target_chrs']
+    target_chr = _module.module_settings['target_chr']
 
-    _module.logger.info("Trim Fasta for chromosome(s): {}".format(target_chrs))
+    _module.logger.info("Trim Fasta for chromosome(s): {}".format(target_chr))
 
     # trim fasta
     # workdir - no need to keep this fasta
     out_fasta = os.path.join(
         _module.module_settings['workdir'],
-        "chr_{}.fa".format(target_chrs))
+        "chr_{}.fa".format(target_chr))
 
     cmd = ["samtools", "faidx",
            _module.module_settings['fasta_file'],
-           target_chrs]
+           target_chr]
     run_process(cmd, _module.logger, out_fasta)    
 
     # index the new fasta
@@ -131,15 +131,15 @@ def trim_vcf(_module):
     if we should only use a subset of the input vcf
     useful e.g. if we want to speed up analyses
     """
-    target_chrs = _module.module_settings['target_chrs']
+    target_chr = _module.module_settings['target_chr']
 
-    _module.logger.info("Trim VCF for chromosome(s): {}".format(target_chrs))
+    _module.logger.info("Trim VCF for chromosome(s): {}".format(target_chr))
     out_vcf = os.path.join(
         _module.module_settings['outdir'],
-        "chr_{}.vcf.gz".format(target_chrs))
+        "chr_{}.vcf.gz".format(target_chr))
 
     cmd = ["bcftools", "filter", "--output-type", "z",
-           "--regions", target_chrs,
+           "--regions", target_chr,
            _module.module_settings['truth_set_vcf']]
     run_process(cmd, _module.logger, out_vcf)
 
@@ -159,14 +159,14 @@ def trim_bam(_module):
     if not in_bam:
         return 
 
-    target_chrs = _module.module_settings['target_chrs']
+    target_chr = _module.module_settings['target_chr']
     out_bam = os.path.join(
         _module.module_settings['outdir'],
-        "chr_{}.bam".format(target_chrs))
+        "chr_{}.bam".format(target_chr))
 
-    _module.logger.info("Trim BAM for chromosome(s): {}".format(target_chrs))
+    _module.logger.info("Trim BAM for chromosome(s): {}".format(target_chr))
 
-    cmd = ["samtools", "view", "-b", "-h", in_bam, target_chrs]
+    cmd = ["samtools", "view", "-b", "-h", in_bam, target_chr]
     run_process(cmd, _module.logger, out_bam)
 
     cmd = ["samtools", "index", out_bam]
