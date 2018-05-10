@@ -30,20 +30,9 @@ from collections import Counter
 this_dir_path = os.path.dirname(os.path.realpath(__file__))
 
 ###########################################################
-class FilterCnvProbesAndBuildTargetBed(ModuleBase):
-    """
-    filter the probes file to only include probes from the target contig
-    also build target bed from probes file
-
-    Example probes file:
-    >chr20:68259-68454
-    ATGATAGACCA...
-    >chr20:76636-77230
-    TCTCTACAGGTAGCTTTGA...
-    """
-
+class PrepCNVprobes(ModuleBase):
     default_settings = {}
-    expected_settings = ["target_chr"]
+    expected_settings = ["target_chrs"]
     promised_outputs = ["target_region_bed", "exome_probes"]
     update_db_keys = ["target_region_bed", "cnv_target_bed"]
 
@@ -52,19 +41,16 @@ class FilterCnvProbesAndBuildTargetBed(ModuleBase):
         probes = probes[0]
         self.logger.info("selected probe file: {}".format(probes))
 
-        # inspect target chr
-        # make compatible with hg19 (force "chr")
-        # make sure only one contig
-        target_chr = self.module_settings["target_chr"]
-        assert not isinstance(target_chr, list)
-        target_chr = str(target_chr)
-        # and make sure we only simulate contigs 1-22
-        target_chr = "chr{}".format(target_chr.replace("chr", ""))
-        if not target_chr in ["chr{}".format(str(i)) for i in range(1,22)]:
-            print "Target chr: {}, not valid selection".format(target_chr)
-        self.module_settings["target_chr"] = target_chr
+        # add target chrs info
+        target_chrs = self.module_settings["target_chrs"]
+        assert not isinstance(target_chrs, list)
+        target_chrs = str(target_chrs)
+        target_chrs = "chr{}".format(target_chrs.replace("chr", ""))
+        if not target_chrs in ["chr{}".format(str(i)) for i in range(1,22)]:
+            print "Target chr: {}, not valid selection".format(target_chrs)
+        self.module_settings["target_chrs"] = target_chrs
 
-        # build the target bed from the probe file
+        # new out files
         target_region_bed = os.path.join(self.module_settings["outdir"],
                                          "target_region_bed.txt")
 
@@ -80,24 +66,38 @@ class FilterCnvProbesAndBuildTargetBed(ModuleBase):
             target_header = False
 
             for line in stream_in:
-                if target_header: # prev line was like this: ">chr20:68259-68454"
+                if target_header:
                     stream_probes_out.write(line)
                     target_header = False
-                elif self.module_settings["target_chr"] in line.split()[0]:
+                elif self.module_settings["target_chrs"] in line.split()[0]:
                     target_header = True
                     # probes file
                     stream_probes_out.write(line)
                     # bed
                     _from, _to = line.split(":")[1].split("-")
                     stream_bed_out.write("{}\t{}\t{}".format(
-                            self.module_settings["target_chr"],
+                            self.module_settings["target_chrs"],
                             _from, _to))
                     line_counter += 1
                                          
         except Exception as e:
-            raise PipelineExc("Failed to create filtered probe files: {}".format(e))
+            raise PipelineExc("Failed to create filtered probe files: {}"
+                              "".format(e))
         finally:
             stream_in.close()
+            stream_bed_out.close()
+            stream_probes_out.close()
+
+        assert line_counter > 5, 'probes do not match chromosome selection'
+        self.module_settings["target_region_bed"] = target_region_bed
+        self.module_settings["cnv_target_bed"] = target_region_bed
+        self.module_settings["exome_probes"] = exome_probes
+     
+
+
+###########################################################
+class CNV_Base(ModuleBase):
+    default_settings = {}
             stream_bed_out.close()
             stream_probes_out.close()
 
@@ -465,9 +465,9 @@ class Capsim(ModuleBase):
                       "gold_roc_flag"]
 
     def run(self):
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         self.logger.info('Capsim: simulating reads ...')
-
+	self.module_settings['number-of-reads'] = int(self.module_settings['number-of-reads'])/4
         for idx in [1,2]:
             self.logger.info("Simulate haplotype {}".format(idx))
             self.logger.info("")
@@ -483,7 +483,7 @@ class Capsim(ModuleBase):
            
             # align probes
             self.logger.info('Aligning probe file')
-            probes_in = self.module_settings['probe_file']
+            probes_in = self.module_settings['exome_probes']
             probes_aligned_to_this_ref = os.path.join(
                 self.module_settings['outdir'], 'probes_{}.sam'.format(idx))
             cmd = "bowtie2 --local --very-sensitive-local --mp 8 --rdg 10,8 --rfg 10,8 -k 10000 "
@@ -492,23 +492,34 @@ class Capsim(ModuleBase):
             run_process(cmd, self.logger)
             
             # sort the probe bam
-            probes_aligned_to_this_ref_sorted = os.path.join(
-                self.module_settings['outdir'], 'probes_sorted_{}.sam'.format(idx))
-            cmd = "export PATH=/usr/java/jdk1.8.0_72/jre/bin:$PATH; samtools sort {} {}"
-            cmd = cmd.format(probes_aligned_to_this_ref, probes_aligned_to_this_ref_sorted)
+            probes_aligned_to_this_ref_sorted_prefix = os.path.join(
+                self.module_settings['outdir'], 'probes_sorted_{}'.format(idx))
+            cmd = "samtools sort {} {}"
+            cmd = cmd.format(probes_aligned_to_this_ref, probes_aligned_to_this_ref_sorted_prefix)
             run_process(cmd, self.logger)
 
             # index the bam
-            cmd="samtools index {}".format(probes_aligned_to_this_ref_sorted)
+            cmd="samtools index {}.bam".format(probes_aligned_to_this_ref_sorted_prefix)
             run_process(cmd, self.logger)
 
             # simulate reads
-            cmd = "/home/gavinp/.usr/local/bin/jsa.sim.capsim --reference {} --probe {}".format(
-                mod_fasta, probes_aligned_to_this_ref_sorted)
+            cmd = "export PATH=/usr/java/jdk1.8.0_72/jre/bin:$PATH; "
+            cmd += "/home/gavinp/.usr/local/bin/jsa.sim.capsim --reference {} --probe {}.bam".format(
+                mod_fasta, probes_aligned_to_this_ref_sorted_prefix)
             cmd += " --ID someid --fmedian {fragment-size} --miseq {outdir}/output "
             cmd += " --illen {read-len} --num {number-of-reads} "
             cmd = cmd.format(**self.module_settings)
-            run_process(cmd, self.logger)
+            self.logger.info("run: {}".format(cmd))
+            p = subprocess.Popen(cmd, shell=True, executable='/bin/bash',
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.STDOUT)
+            p.wait()
+            output, error = p.communicate()
+            self.logger.info("Cmd output: {}".format(output))
+            self.logger.info("cmd exit code: {}".format(p.returncode))
+            if p.returncode:
+                self.logger.error("cmd: {}".format(" ".join(arguments)))
+                raise PipelineExc("bash cmd failed: {}".format(error))
 
             cmd="mv {outdir}/output_1.fastq.gz {outdir}/output_ref_{hap_idx}_1.fastq.gz".format(
                 **self.module_settings)
@@ -527,7 +538,7 @@ class Capsim(ModuleBase):
             cmd = "cat {outdir}/output_ref_1_{fq_idx}.fastq.gz {outdir}/output_ref_2_{fq_idx}.fastq.gz "
             cmd += " > {outdir}/capsim_{fq_idx}.fastq.gz"
             cmd = cmd.format(**self.module_settings)
-            run_process(cmd)       
+            run_process(cmd, self.logger)       
             
             fq_key = "fastq_location_{}".format(fq_idx)
             self.module_settings[fq_key] = "{outdir}/capsim_{fq_idx}.fastq.gz".format(self.module_settings)
@@ -743,7 +754,8 @@ class AltContigVCF(ModuleBase):
 
     def create_truth_vcf(self):
         script_path = os.path.join(this_dir_path, "alt_contig", "fasta_sam_to_vcf.pl")
-        self.module_settings["truth_vcf"] = os.path.join(self.module_settings["outdir"], "alt_contig_truth.vcf")
+        self.module_settings["truth_vcf"] = os.path.join(self.module_settings["outdir"], 
+                                                         "alt_contig_truth.vcf")
         cmd = script_path + " {fasta_file} {alt-sam} {contig-1}:{contig-1-from}-{contig-1-to} " + \
             "{contig-2}:{contig-2-from}-{contig-2-to} > {truth_vcf}"
         cmd = cmd.format(**self.module_settings)
@@ -789,7 +801,7 @@ class Pirs(ModuleBase):
             # build mason profiles
             if not self.module_settings.get('hash_table6'):
                 print "need a hash table"
-                import pdb; pdb.set_trace()
+                # import pdb; pdb.set_trace()
                 sys.exit(1)
 
             # RUN MASON       
@@ -1008,62 +1020,14 @@ class Mason(ModuleBase):
         for i in ["1", "2"]:
             p = os.path.join(self.module_settings["outdir"], '*{}.fastq'.format(i))
             p_res = glob.glob(p)
+            stream_out.write("RGPL,RGID,RGSM,RGLB,Lane,Read1File,RGCN,Read2File,RGDS,RGDT,RGPI\n")
+            tmp = "DRAGEN_RGPL,DRAGEN_RGID_tumor_{},sim_tumor,ILLUMINA,{}" + \
+                ",{},DRAGEN_RGCN,{},DRAGEN_RGDS,DRAGEN_RGDT,DRAGEN_RGPI\n"
+            line = tmp.format(1, 1, tumor_fqs[0], tumor_fqs[1])
+            stream_out.write(line)
 
-            if len(p_res) != 1: 
-                raise PipelineExc("Too many/few matching fastqs found in "
-                                  "mason output folder: {}".format(p_res))
-            fq_list.append(p_res[0])
-
-        self.logger.info('Find the mason generated sam and upload to DB')                                        
-        p = os.path.join(self.module_settings["outdir"], '*fastq.sam')
-        p_res = glob.glob(p)
-        sam_gold = p_res[0]
-
-        self.module_settings["fastq_location_1"] = fq_list[0]
-        self.module_settings["fastq_location_2"] = fq_list[1]
-        self.module_settings["sam_gold"] = sam_gold
-
-
-###########################################################
-class Pirs_Tumor(ModuleBase):
-    default_settings = {
-        "insert-len-mean": 800,
-        "PE100": "/opt/pirs-2.0.1/Profiles/Base-Calling_Profiles/humNew.PE100.matrix.gz",
-        "indels": "/opt/pirs-2.0.1/Profiles/InDel_Profiles/phixv2.InDel.matrix",
-        "gcdep": "/opt/pirs-2.0.1/Profiles/GC-depth_Profiles/humNew.gcdep_100.dat",
-    }
-    expected_settings = ["PE100", "indels", "gcdep", "mod_fasta_1", "mod_fasta_2",
-                         "fasta_file", "tumor_cov", "non_tumor_cov"]
-
-    promised_outputs = []
-
-    def run(self):
-        # create reads for tumor sample 
-        # non-tumor reads are included in tumor fastq sheet to adjust allele frequencies
-        # the actual "normal" fqs for use in tumor-normal runs are simulated seperately
-        self.logger.info('Pirs Tumor: simulating tumor reads ...')
-        log_t = os.path.join(self.module_settings['outdir'], "pirs_tumor.log")
-        log_nt = os.path.join(self.module_settings['outdir'], "pirs_non_tumor.log")
-
-        # need to update the module settings
-        for i in ["mod_fasta_1", "mod_fasta_2", "fasta_file"]:
-            self.module_settings[i] = self.module_settings[i]
-
-        # tumor
-        tumor_cmd = \
-            "pirs simulate -l 100 -x {tumor_cov} -o {outdir}/pirs_tumor" + \
-            " --insert-len-mean={insert-len-mean} --insert-len-sd=40 --diploid " + \
-            " --base-calling-profile={PE100}" + \
-            " --indel-error-profile={indels}" + \
-            " --gc-bias-profile={gcdep}" 
-        stream_out.write("RGPL,RGID,RGSM,RGLB,Lane,Read1File,RGCN,Read2File,RGDS,RGDT,RGPI\n")
-        tmp = "DRAGEN_RGPL,DRAGEN_RGID_tumor_{},sim_tumor,ILLUMINA,{}" + \
-              ",{},DRAGEN_RGCN,{},DRAGEN_RGDS,DRAGEN_RGDT,DRAGEN_RGPI\n"
-        line = tmp.format(1, 1, tumor_fqs[0], tumor_fqs[1])
-        stream_out.write(line)
-
-        line = tmp.format(2, 2, non_tumor_fqs[0], non_tumor_fqs[1])
-        stream_out.write(line)
+            line = tmp.format(2, 2, non_tumor_fqs[0], non_tumor_fqs[1])
+            stream_out.write(line)
         self.db_api.upload_to_db('csv_list', fq_list)
 
 
