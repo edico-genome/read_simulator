@@ -30,9 +30,19 @@ from collections import Counter
 this_dir_path = os.path.dirname(os.path.realpath(__file__))
 
 ###########################################################
-class PrepCNVprobes(ModuleBase):
+class FilterCnvProbesAndBuildTargetBed(ModuleBase):
+    """
+    filter the probes file to only include probes from the target contig
+    also build target bed from probes file
+
+    Example probes file:
+    >chr20:68259-68454
+    ATGATAGACCA...
+    >chr20:76636-77230
+    TCTCTACAGGTAGCTTTGA...
+    """
     default_settings = {}
-    expected_settings = ["target_chrs"]
+    expected_settings = ["target_chr"]
     promised_outputs = ["target_region_bed", "exome_probes"]
     update_db_keys = ["target_region_bed", "cnv_target_bed"]
 
@@ -42,13 +52,13 @@ class PrepCNVprobes(ModuleBase):
         self.logger.info("selected probe file: {}".format(probes))
 
         # add target chrs info
-        target_chrs = self.module_settings["target_chrs"]
-        assert not isinstance(target_chrs, list)
-        target_chrs = str(target_chrs)
-        target_chrs = "chr{}".format(target_chrs.replace("chr", ""))
-        if not target_chrs in ["chr{}".format(str(i)) for i in range(1,22)]:
-            print "Target chr: {}, not valid selection".format(target_chrs)
-        self.module_settings["target_chrs"] = target_chrs
+        target_chr = self.module_settings["target_chr"]
+        assert not isinstance(target_chr, list)
+        target_chr = str(target_chr)
+        target_chr = "chr{}".format(target_chr.replace("chr", ""))
+        if not target_chr in ["chr{}".format(str(i)) for i in range(1,22)]:
+            print "Target chr: {}, not valid selection".format(target_chr)
+        self.module_settings["target_chr"] = target_chr
 
         # new out files
         target_region_bed = os.path.join(self.module_settings["outdir"],
@@ -69,14 +79,14 @@ class PrepCNVprobes(ModuleBase):
                 if target_header:
                     stream_probes_out.write(line)
                     target_header = False
-                elif self.module_settings["target_chrs"] in line.split()[0]:
+                elif self.module_settings["target_chr"] in line.split()[0]:
                     target_header = True
                     # probes file
                     stream_probes_out.write(line)
                     # bed
                     _from, _to = line.split(":")[1].split("-")
                     stream_bed_out.write("{}\t{}\t{}".format(
-                            self.module_settings["target_chrs"],
+                            self.module_settings["target_chr"],
                             _from, _to))
                     line_counter += 1
                                          
@@ -94,18 +104,6 @@ class PrepCNVprobes(ModuleBase):
         self.module_settings["exome_probes"] = exome_probes
      
 
-
-###########################################################
-class CNV_Base(ModuleBase):
-    default_settings = {}
-            stream_bed_out.close()
-            stream_probes_out.close()
-
-        assert line_counter > 5, 'probes do not match chromosome selection'
-        self.module_settings["target_region_bed"] = target_region_bed
-        self.module_settings["cnv_target_bed"] = target_region_bed
-        self.module_settings["exome_probes"] = exome_probes
-     
 
 ###########################################################
 class RsvsimGdbVcf(ModuleBase):
