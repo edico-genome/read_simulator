@@ -530,7 +530,7 @@ class Capsim(ModuleBase):
         # merge results
         self.logger.info("Merge Results")
         for fq_idx in [1, 2]:
-            self.module_settings['fq_idx'] = idx
+            self.module_settings['fq_idx'] = fq_idx
 
             # fq 1/2
             cmd = "cat {outdir}/output_ref_1_{fq_idx}.fastq.gz {outdir}/output_ref_2_{fq_idx}.fastq.gz "
