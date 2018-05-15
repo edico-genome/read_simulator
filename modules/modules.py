@@ -536,12 +536,23 @@ class Capsim(ModuleBase):
             cmd = "cat {outdir}/output_ref_1_{fq_idx}.fastq.gz {outdir}/output_ref_2_{fq_idx}.fastq.gz "
             cmd += " > {outdir}/capsim_{fq_idx}.fastq.gz"
             cmd = cmd.format(**self.module_settings)
-            run_process(cmd, self.logger)       
+            self.logger.info(cmd)
+            p = subprocess.Popen(cmd, shell=True, executable='/bin/bash',
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.STDOUT)
+            p.wait()
+            output, error = p.communicate()
+            self.logger.info("Cmd output: {}".format(output))
+            self.logger.info("cmd exit code: {}".format(p.returncode))
+            if p.returncode:
+                self.logger.error("cmd: {}".format(" ".join(arguments)))
+                raise PipelineExc("bash cmd failed: {}".format(error))
             
             fq_key = "fastq_location_{}".format(fq_idx)
-            self.module_settings[fq_key] = "{outdir}/capsim_{fq_idx}.fastq.gz".format(self.module_settings)
+            self.module_settings[fq_key] = "{outdir}/capsim_{fq_idx}.fastq.gz".format(**self.module_settings)
 
         # update db with results
+        self.logger.info("Final module settings: {}".format(self.module_settings))
         self.module_settings["fastq_offser_override"] = 1
         self.module_settings["gold_roc_flag"] = 1
         self.module_settings["fastq_offser_override_detail"] = 33
